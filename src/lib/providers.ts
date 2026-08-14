@@ -136,7 +136,7 @@ async function callCloudflare(credentials: string, call: Call) {
     {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiToken}` },
-      signal: call.signal: signal ?? null,
+      signal: call.signal ?? null,
       body: JSON.stringify({
         stream: true,
         max_tokens: 16000,

@@ -51,7 +51,7 @@ type Call = {
   system: string;
   prompt: string;
   onDelta: Delta;
-  signal?: AbortSignal;
+  signal?: AbortSignal | null;
 };
 
 const GEMINI_MODELS = ["gemini-flash-latest", "gemini-2.0-flash", "gemini-pro-latest"];
@@ -64,7 +64,7 @@ async function callGemini(apiKey: string, { system, prompt, onDelta, signal }: C
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        signal,
+        signal: signal ?? null,
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: system }] },
           contents: [{ role: "user", parts: [{ text: prompt }] }],
@@ -109,7 +109,7 @@ async function callOpenAICompatible(
       Authorization: `Bearer ${apiKey}`,
       ...(provider === "OpenRouter" ? { "X-Title": "Novel Reconstruction Engine" } : {}),
     },
-    signal,
+    signal: signal ?? null,
     body: JSON.stringify({
       model,
       stream: true,
@@ -136,7 +136,7 @@ async function callCloudflare(credentials: string, call: Call) {
     {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiToken}` },
-      signal: call.signal,
+      signal: call.signal: signal ?? null,
       body: JSON.stringify({
         stream: true,
         max_tokens: 16000,
@@ -156,7 +156,7 @@ async function callProjectChain(startAt: ProviderId | "opensource", call: Call) 
   const res = await fetch("/api/public/ai-rewrite", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    signal: call.signal,
+    signal: call.signal ?? null,
     body: JSON.stringify({ system: call.system, prompt: call.prompt, startAt }),
   });
   if (!res.ok) await failure("Project providers", res);

@@ -39,31 +39,31 @@ export function wordDiff(a: string, b: string): DiffPart[] {
     const n = midL.length;
     const m = midR.length;
     const table = new Uint32Array((n + 1) * (m + 1));
+    const at = (i: number, j: number) => table[i * (m + 1) + j] ?? 0;
     for (let i = n - 1; i >= 0; i--) {
       for (let j = m - 1; j >= 0; j--) {
         table[i * (m + 1) + j] =
-          midL[i] === midR[j]
-            ? table[(i + 1) * (m + 1) + j + 1] + 1
-            : Math.max(table[(i + 1) * (m + 1) + j], table[i * (m + 1) + j + 1]);
+          midL[i] === midR[j] ? at(i + 1, j + 1) + 1 : Math.max(at(i + 1, j), at(i, j + 1));
       }
     }
     let i = 0;
     let j = 0;
     while (i < n && j < m) {
       if (midL[i] === midR[j]) {
-        push("same", midL[i]);
+        push("same", midL[i] ?? "");
         i++;
         j++;
-      } else if (table[(i + 1) * (m + 1) + j] >= table[i * (m + 1) + j + 1]) {
-        push("removed", midL[i]);
+      } else if (at(i + 1, j) >= at(i, j + 1)) {
+        push("removed", midL[i] ?? "");
         i++;
       } else {
-        push("added", midR[j]);
+        push("added", midR[j] ?? "");
         j++;
       }
     }
-    while (i < n) push("removed", midL[i++]);
-    while (j < m) push("added", midR[j++]);
+    while (i < n) push("removed", midL[i++] ?? "");
+    while (j < m) push("added", midR[j++] ?? "");
+
   }
 
   push("same", left.slice(endL).join(""));

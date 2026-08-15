@@ -34,9 +34,11 @@ async function readSSE(res: Response, pick: (json: unknown) => string | undefine
           out += piece;
           onDelta(piece);
         }
-      } catch {
-        /* ignore malformed keep-alive frames */
+      } catch (error) {
+        // Upstream error frames must surface; malformed keep-alives are ignored.
+        if (error instanceof ProviderError) throw error;
       }
+
     }
   }
   return out;

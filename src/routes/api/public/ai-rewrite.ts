@@ -96,7 +96,7 @@ function buildChain(system: string, prompt: string): Upstream[] {
 
   const lovable = process.env["LOVABLE_API_KEY"];
   if (lovable) {
-    for (const model of ["google/gemini-3-flash", "openai/gpt-5.2-chat"]) {
+    for (const model of ["google/gemini-3.6-flash", "google/gemini-2.5-flash"]) {
       chain.push({
         label: `Free provider (${model})`,
         pick: openAIPick,
@@ -109,6 +109,7 @@ function buildChain(system: string, prompt: string): Upstream[] {
       });
     }
   }
+
 
   return chain;
 }

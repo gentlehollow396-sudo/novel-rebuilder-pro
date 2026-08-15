@@ -183,7 +183,6 @@ export const Route = createFileRoute("/api/public/ai-rewrite")({
           headers: {
             "Content-Type": "text/event-stream",
             "Cache-Control": "no-cache",
-            Connection: "keep-alive",
           },
         });
       },

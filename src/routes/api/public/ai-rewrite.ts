@@ -96,7 +96,7 @@ function buildChain(system: string, prompt: string): Upstream[] {
 
   const lovable = process.env["LOVABLE_API_KEY"];
   if (lovable) {
-    for (const model of ["google/gemini-3-flash", "openai/gpt-5.2-chat"]) {
+    for (const model of ["google/gemini-3.6-flash", "google/gemini-2.5-flash"]) {
       chain.push({
         label: `Free provider (${model})`,
         pick: openAIPick,
@@ -109,6 +109,7 @@ function buildChain(system: string, prompt: string): Upstream[] {
       });
     }
   }
+
 
   return chain;
 }
@@ -164,6 +165,8 @@ export const Route = createFileRoute("/api/public/ai-rewrite")({
 
         const stream = new ReadableStream<Uint8Array>({
           async start(controller) {
+            // Flush headers immediately so the browser sees the stream open.
+            controller.enqueue(encoder.encode(": open\n\n"));
             const errors: string[] = [];
             for (const upstream of chain) {
               try {
@@ -174,8 +177,12 @@ export const Route = createFileRoute("/api/public/ai-rewrite")({
                 errors.push((error as Error).message);
               }
             }
-            controller.enqueue(frame(""));
-            controller.error(new Error(errors.join(" | ")));
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({ error: errors.join(" | ") || "All project providers failed" })}\n\n`,
+              ),
+            );
+            controller.close();
           },
         });
 
@@ -183,9 +190,9 @@ export const Route = createFileRoute("/api/public/ai-rewrite")({
           headers: {
             "Content-Type": "text/event-stream",
             "Cache-Control": "no-cache",
-            Connection: "keep-alive",
           },
         });
+
       },
     },
   },

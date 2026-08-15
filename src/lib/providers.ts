@@ -34,9 +34,11 @@ async function readSSE(res: Response, pick: (json: unknown) => string | undefine
           out += piece;
           onDelta(piece);
         }
-      } catch {
-        /* ignore malformed keep-alive frames */
+      } catch (error) {
+        // Upstream error frames must surface; malformed keep-alives are ignored.
+        if (error instanceof ProviderError) throw error;
       }
+
     }
   }
   return out;
@@ -160,7 +162,16 @@ async function callProjectChain(startAt: ProviderId | "opensource", call: Call) 
     body: JSON.stringify({ system: call.system, prompt: call.prompt, startAt }),
   });
   if (!res.ok) await failure("Project providers", res);
-  return readSSE(res, (json) => (json as { text?: string }).text, call.onDelta);
+  return readSSE(
+    res,
+    (json) => {
+      const frame = json as { text?: string; error?: string };
+      if (frame.error) throw new ProviderError("Project providers", frame.error);
+      return frame.text;
+    },
+    call.onDelta,
+  );
+
 }
 
 export type Attempt = { label: string; error?: string };

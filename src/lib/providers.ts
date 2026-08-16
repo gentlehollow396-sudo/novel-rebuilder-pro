@@ -1,4 +1,4 @@
-import { PROVIDER_LABELS, type ProviderId, type UserKeys } from "./keys";
+import { keyFormatOk, PROVIDER_LABELS, type ProviderId, type UserKeys } from "./keys";
 
 export type Delta = (chunk: string) => void;
 
@@ -292,4 +292,126 @@ export async function validateKey(
   } catch (error) {
     return { ok: false, detail: (error as Error).message };
   }
+}
+
+/* ------------------------------ diagnostics ------------------------------ */
+
+export type DiagnosticStep = {
+  label: string;
+  status: "ok" | "fail" | "warn";
+  detail: string;
+  hint?: string;
+};
+
+const ENDPOINTS: Record<keyof UserKeys, string> = {
+  gemini: "https://generativelanguage.googleapis.com/v1beta/models",
+  openrouter: "https://openrouter.ai/api/v1/key",
+  groq: "https://api.groq.com/openai/v1/models",
+  cloudflare: "https://api.cloudflare.com/client/v4/accounts/<id>/ai/models/search",
+};
+
+function statusHint(provider: keyof UserKeys, status: number): string {
+  if (status === 400) return "Malformed key or request — re-copy the key from the provider console.";
+  if (status === 401 || status === 403)
+    return provider === "gemini"
+      ? "Key rejected: it may be revoked, restricted to other APIs/referrers, or the Generative Language API is not enabled on that Google Cloud project."
+      : "Key rejected: revoked, expired, or lacking permission for this endpoint.";
+  if (status === 404)
+    return provider === "cloudflare"
+      ? "Account ID not found — check the accountId part before the colon."
+      : "Endpoint or model not found for this key.";
+  if (status === 429) return "Rate limited or out of quota/credits — wait, or top up the account.";
+  if (status >= 500) return "Provider outage — retry in a few minutes.";
+  return "Unexpected response from the provider.";
+}
+
+/** Deep check that explains *why* a key fails, step by step. */
+export async function diagnoseKey(
+  provider: keyof UserKeys,
+  value: string,
+): Promise<DiagnosticStep[]> {
+  const steps: DiagnosticStep[] = [];
+  const key = value.trim();
+
+  // 1. Presence
+  if (!key) {
+    steps.push({
+      label: "Key present",
+      status: "fail",
+      detail: "No key entered.",
+      hint: "Paste the key into the field above, then troubleshoot again.",
+    });
+    return steps;
+  }
+  steps.push({ label: "Key present", status: "ok", detail: `${key.length} characters` });
+
+  // 2. Obvious copy/paste damage
+  if (/\s/.test(value) && value.trim() !== value) {
+    steps.push({
+      label: "Whitespace",
+      status: "warn",
+      detail: "Leading/trailing spaces detected — they are trimmed automatically.",
+    });
+  }
+  if (/\s/.test(key)) {
+    steps.push({
+      label: "Whitespace",
+      status: "fail",
+      detail: "The key contains spaces or line breaks.",
+      hint: "Re-copy the key; a line break usually means it was pasted from a wrapped view.",
+    });
+  }
+  if (/^["'].*["']$/.test(key)) {
+    steps.push({
+      label: "Quoting",
+      status: "fail",
+      detail: "The key is wrapped in quotes.",
+      hint: "Remove the surrounding quote characters.",
+    });
+  }
+
+  // 3. Format
+  const formatOk = keyFormatOk(provider, key);
+  steps.push({
+    label: "Format",
+    status: formatOk ? "ok" : "fail",
+    detail: formatOk
+      ? "Matches the expected shape for this provider."
+      : provider === "cloudflare"
+        ? "Expected accountId:apiToken (two values separated by a colon)."
+        : "Does not look like a valid key for this provider.",
+    ...(formatOk ? {} : { hint: "Check you pasted the key for the right provider." }),
+  });
+  if (!formatOk) return steps;
+
+  // 4. Live call
+  const started = performance.now();
+  try {
+    const result = await validateKey(provider, key);
+    const ms = Math.round(performance.now() - started);
+    const status = Number(/\((\d{3})\)/.exec(result.detail)?.[1] ?? 0);
+    steps.push({
+      label: "Provider response",
+      status: result.ok ? "ok" : "fail",
+      detail: `${result.detail} · ${ms}ms`,
+      ...(result.ok ? {} : { hint: statusHint(provider, status) }),
+    });
+    if (result.ok && provider === "openrouter" && /\$0\.0000 left/.test(result.detail)) {
+      steps.push({
+        label: "Credits",
+        status: "warn",
+        detail: "No spend remaining on this key — calls will fail with 402/429.",
+        hint: "Top up credits or raise the key's spend limit.",
+      });
+    }
+  } catch (error) {
+    steps.push({
+      label: "Network",
+      status: "fail",
+      detail: (error as Error).message,
+      hint: `Could not reach ${ENDPOINTS[provider]} — check your connection, VPN, ad-blocker, or browser extensions blocking the request.`,
+    });
+  }
+
+  return steps;
 }

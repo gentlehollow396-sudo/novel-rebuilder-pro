@@ -38,16 +38,20 @@ export async function ingestPdf(
     const first = await doc.getPage(1);
     const viewport = first.getViewport({ scale: 1.5 });
     const canvas = document.createElement("canvas");
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
+    canvas.width = Math.floor(viewport.width);
+    canvas.height = Math.floor(viewport.height);
     const context = canvas.getContext("2d");
     if (context) {
-      await first.render({ canvas, canvasContext: context, viewport }).promise;
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      await first.render({ canvasContext: context, viewport } as never).promise;
       cover = canvas.toDataURL("image/jpeg", 0.85);
     }
-  } catch {
+  } catch (error) {
+    console.warn("Cover render failed", error);
     cover = null;
   }
+
 
   return { pages, cover };
 }

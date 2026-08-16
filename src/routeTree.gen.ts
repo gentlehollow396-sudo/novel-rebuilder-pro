@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiPublicAiRewriteRouteImport } from './routes/api/public/ai-rewrite'
+import { Route as ApiPublicOpenrouterRouteImport } from './routes/api/public/openrouter'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -22,31 +23,40 @@ const ApiPublicAiRewriteRoute = ApiPublicAiRewriteRouteImport.update({
   path: '/api/public/ai-rewrite',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicOpenrouterRoute = ApiPublicOpenrouterRouteImport.update({
+  id: '/api/public/openrouter',
+  path: '/api/public/openrouter',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/api/public/ai-rewrite': typeof ApiPublicAiRewriteRoute
+  '/api/public/openrouter': typeof ApiPublicOpenrouterRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/api/public/ai-rewrite': typeof ApiPublicAiRewriteRoute
+  '/api/public/openrouter': typeof ApiPublicOpenrouterRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/api/public/ai-rewrite': typeof ApiPublicAiRewriteRoute
+  '/api/public/openrouter': typeof ApiPublicOpenrouterRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/public/ai-rewrite'
+  fullPaths: '/' | '/api/public/ai-rewrite' | '/api/public/openrouter'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/public/ai-rewrite'
-  id: '__root__' | '/' | '/api/public/ai-rewrite'
+  to: '/' | '/api/public/ai-rewrite' | '/api/public/openrouter'
+  id: '__root__' | '/' | '/api/public/ai-rewrite' | '/api/public/openrouter'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ApiPublicAiRewriteRoute: typeof ApiPublicAiRewriteRoute
+  ApiPublicOpenrouterRoute: typeof ApiPublicOpenrouterRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -65,12 +75,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicAiRewriteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/openrouter': {
+      id: '/api/public/openrouter'
+      path: '/api/public/openrouter'
+      fullPath: '/api/public/openrouter'
+      preLoaderRoute: typeof ApiPublicOpenrouterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ApiPublicAiRewriteRoute: ApiPublicAiRewriteRoute,
+  ApiPublicOpenrouterRoute: ApiPublicOpenrouterRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -72,7 +72,8 @@ export function keyFormatOk(provider: keyof UserKeys, value: string): boolean {
   if (!v) return false;
   switch (provider) {
     case "gemini":
-      return v.length > 20 && !v.includes(" ");
+      // Accept any prefix (AIza, AQ..., etc.) — only reject obviously malformed values.
+      return v.length >= 8 && !/\s/.test(v);
     case "openrouter":
       return v.startsWith("sk-or-") || v.length > 20;
     case "groq":

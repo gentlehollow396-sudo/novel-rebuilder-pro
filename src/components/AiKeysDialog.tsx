@@ -23,8 +23,9 @@ import {
 import { validateKey, type ValidationResult } from "@/lib/providers";
 
 const FIELDS: { id: keyof UserKeys; label: string; placeholder: string }[] = [
-  { id: "gemini", label: "Gemini API key", placeholder: "AIza..." },
-  { id: "openrouter", label: "OpenRouter API key", placeholder: "sk-or-v1-..." },
+  { id: "gemini", label: "Gemini API key", placeholder: "Your Gemini key" },
+  // OpenRouter is intentionally omitted: it is handled server-side via the
+  // OPENROUTER_API_KEY secret so the UI cannot interfere with that integration.
   { id: "cloudflare", label: "Cloudflare Workers AI", placeholder: "accountId:apiToken" },
   { id: "groq", label: "Groq API key", placeholder: "gsk_..." },
 ];

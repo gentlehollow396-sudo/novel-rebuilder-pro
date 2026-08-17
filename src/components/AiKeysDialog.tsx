@@ -1,5 +1,14 @@
 import { useState } from "react";
-import { KeyRound, Loader2, ShieldCheck, ShieldX } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  KeyRound,
+  Loader2,
+  ShieldCheck,
+  ShieldX,
+  Stethoscope,
+  XCircle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,7 +29,8 @@ import {
   type UsageMap,
   type UserKeys,
 } from "@/lib/keys";
-import { validateKey, type ValidationResult } from "@/lib/providers";
+import { diagnoseKey, validateKey, type DiagnosticStep, type ValidationResult } from "@/lib/providers";
+
 
 const FIELDS: { id: keyof UserKeys; label: string; placeholder: string }[] = [
   { id: "gemini", label: "Gemini API key", placeholder: "Your Gemini key" },

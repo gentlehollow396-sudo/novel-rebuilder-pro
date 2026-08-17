@@ -184,11 +184,6 @@ export function AiKeysDialog({ keys, onChange, usage, onUsageChange }: Props) {
           })}
         </div>
 
-              </div>
-            );
-          })}
-        </div>
-
         <Separator />
 
         <div className="space-y-2">

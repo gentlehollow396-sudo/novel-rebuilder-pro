@@ -50,6 +50,10 @@ type Props = {
 export function AiKeysDialog({ keys, onChange, usage, onUsageChange }: Props) {
   const [results, setResults] = useState<Partial<Record<keyof UserKeys, ValidationResult>>>({});
   const [checking, setChecking] = useState<keyof UserKeys | null>(null);
+  const [diagnostics, setDiagnostics] = useState<Partial<Record<keyof UserKeys, DiagnosticStep[]>>>(
+    {},
+  );
+  const [diagnosing, setDiagnosing] = useState<keyof UserKeys | null>(null);
 
   const update = (id: keyof UserKeys, value: string) => {
     const next = { ...keys, [id]: value };
@@ -66,6 +70,13 @@ export function AiKeysDialog({ keys, onChange, usage, onUsageChange }: Props) {
     const result = await validateKey(id, keys[id]);
     setResults((prev) => ({ ...prev, [id]: result }));
     setChecking(null);
+  };
+
+  const troubleshoot = async (id: keyof UserKeys) => {
+    setDiagnosing(id);
+    const steps = await diagnoseKey(id, keys[id]);
+    setDiagnostics((prev) => ({ ...prev, [id]: steps }));
+    setDiagnosing(null);
   };
 
   const usageRows = Object.entries(usage);
@@ -91,6 +102,7 @@ export function AiKeysDialog({ keys, onChange, usage, onUsageChange }: Props) {
         <div className="space-y-4">
           {FIELDS.map((field) => {
             const result = results[field.id];
+            const steps = diagnostics[field.id];
             return (
               <div key={field.id} className="space-y-1.5">
                 <Label htmlFor={field.id}>{field.label}</Label>
@@ -114,6 +126,20 @@ export function AiKeysDialog({ keys, onChange, usage, onUsageChange }: Props) {
                       "Test"
                     )}
                   </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    title="Troubleshoot this key"
+                    aria-label={`Troubleshoot ${field.label}`}
+                    onClick={() => void troubleshoot(field.id)}
+                    disabled={diagnosing === field.id}
+                  >
+                    {diagnosing === field.id ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Stethoscope className="size-4" />
+                    )}
+                  </Button>
                 </div>
                 {result ? (
                   <p
@@ -129,6 +155,35 @@ export function AiKeysDialog({ keys, onChange, usage, onUsageChange }: Props) {
                     {result.detail}
                   </p>
                 ) : null}
+                {steps ? (
+                  <ul className="space-y-1.5 rounded-md border border-border bg-muted/40 p-2.5">
+                    {steps.map((step, index) => (
+                      <li key={`${step.label}-${index}`} className="flex gap-2 text-xs">
+                        {step.status === "ok" ? (
+                          <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-primary" />
+                        ) : step.status === "warn" ? (
+                          <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-accent-foreground" />
+                        ) : (
+                          <XCircle className="mt-0.5 size-3.5 shrink-0 text-destructive" />
+                        )}
+                        <span className="min-w-0">
+                          <span className="font-medium">{step.label}:</span>{" "}
+                          <span className="text-muted-foreground break-words">{step.detail}</span>
+                          {step.hint ? (
+                            <span className="mt-0.5 block text-muted-foreground italic">
+                              {step.hint}
+                            </span>
+                          ) : null}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+
               </div>
             );
           })}

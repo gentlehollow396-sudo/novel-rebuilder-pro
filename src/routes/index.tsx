@@ -197,7 +197,7 @@ function Workspace() {
       updateSegment(segment.id, {
         rewritten: html,
         status: "review",
-        servedBy: first.provider_used ?? undefined,
+        ...(first.provider_used ? { servedBy: first.provider_used } : {}),
       });
       setNotice([`Served by ${first.provider_used ?? "unknown provider"}`, parityNote]);
     } catch (error) {

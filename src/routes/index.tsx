@@ -1,44 +1,33 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertTriangle,
   Check,
-  Columns2,
+  Combine,
   Loader2,
+  Merge,
   Pencil,
   RefreshCw,
-  Rows2,
   Sparkles,
   Trash2,
 } from "lucide-react";
-import { AiKeysDialog } from "@/components/AiKeysDialog";
 import { CompilePanel } from "@/components/CompilePanel";
 import { DiffView } from "@/components/DiffView";
 import { UploadPanel } from "@/components/UploadPanel";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { callAiRouter } from "@/lib/ai-client";
 import {
-  EMPTY_KEYS,
-  loadKeys,
-  loadPreferredProvider,
-  loadUsage,
-  PROVIDER_LABELS,
-  recordUsage,
-  savePreferredProvider,
-  type ProviderId,
-  type UsageMap,
-  type UserKeys,
-} from "@/lib/keys";
-import { runWithFallback } from "@/lib/providers";
+  autosaveProject,
+  clearDraft,
+  loadAutosavedProject,
+  loadDraft,
+  saveDraft,
+} from "@/lib/local-drafts";
 import { PARITY_SYSTEM, parityPrompt, REWRITE_SYSTEM, rewritePrompt } from "@/lib/prompts";
-import { useProject, type Segment } from "@/lib/project-store";
+import { useProject, type Project, type Segment } from "@/lib/project-store";
 import { countWords, parseProse, VERIFIED_MARKER } from "@/lib/segments";
 
 export const Route = createFileRoute("/")({
@@ -54,8 +43,10 @@ export const Route = createFileRoute("/")({
       {
         property: "og:description",
         content:
-          "Split, rewrite and recompile a full novel PDF in your browser with multi-provider AI fallback.",
+          "Split, rewrite and recompile a full novel PDF in your browser with automatic AI provider fallback.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: Workspace,
@@ -85,67 +76,116 @@ function toPlainText(html: string) {
   return parseProse(html).join("\n\n");
 }
 
+function driftPercent(original: number, rewritten: number) {
+  if (!original) return 0;
+  return ((rewritten - original) / original) * 100;
+}
+
+function WordMeter({
+  label,
+  words,
+  drift,
+}: {
+  label: string;
+  words: number;
+  drift?: number | undefined;
+}) {
+  const off = drift !== undefined && Math.abs(drift) > 5;
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs">
+      <span className="uppercase tracking-wide text-muted-foreground">{label}</span>
+      <span className="tabular-nums font-medium">{words.toLocaleString()} words</span>
+      {drift !== undefined ? (
+        <span
+          className={`ml-auto flex items-center gap-1 tabular-nums ${
+            off ? "text-destructive" : "text-muted-foreground"
+          }`}
+        >
+          {off ? <AlertTriangle className="size-3.5" /> : null}
+          {drift > 0 ? "+" : ""}
+          {drift.toFixed(1)}%
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function Workspace() {
   const { project, loaded, setProject, updateSegment } = useProject();
-  const [keys, setKeys] = useState<UserKeys>(EMPTY_KEYS);
-  const [usage, setUsage] = useState<UsageMap>({});
-  const [provider, setProvider] = useState<ProviderId>("gemini");
   const [activeId, setActiveId] = useState(1);
-  const [stream, setStream] = useState("");
   const [phase, setPhase] = useState<"idle" | "rewrite" | "parity">("idle");
   const [notice, setNotice] = useState<string[]>([]);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
-  const [diffMode, setDiffMode] = useState<"stacked" | "side">("stacked");
+  const [mobileTab, setMobileTab] = useState<"original" | "rewrite">("rewrite");
   const abortRef = useRef<AbortController | null>(null);
+  const restored = useRef(false);
 
+  // Offline restore: if IndexedDB came back empty, fall back to the LocalStorage mirror.
   useEffect(() => {
-    setKeys(loadKeys());
-    setUsage(loadUsage());
-    setProvider(loadPreferredProvider());
-    setDiffMode(window.innerWidth >= 1024 ? "side" : "stacked");
-  }, []);
+    if (!loaded || restored.current) return;
+    restored.current = true;
+    if (!project) {
+      const saved = loadAutosavedProject();
+      if (saved) setProject(saved);
+    }
+  }, [loaded, project, setProject]);
+
+  // Autosave every change (segments, rewrites, approvals) to LocalStorage.
+  useEffect(() => {
+    if (!loaded) return;
+    autosaveProject(project);
+  }, [project, loaded]);
 
   const active = useMemo(
     () => project?.segments.find((segment) => segment.id === activeId) ?? project?.segments[0],
     [project, activeId],
   );
 
+  // Restore any unsaved edit draft for this segment.
+  useEffect(() => {
+    if (!active) return;
+    const saved = loadDraft(active.id);
+    if (saved && saved.trim()) {
+      setDraft(saved);
+      setEditing(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active?.id]);
+
   const verifiedCount = project?.segments.filter((s) => s.status === "verified").length ?? 0;
   const busy = phase !== "idle";
+
+  const originalWords = active ? countWords(active.original) : 0;
+  const rewrittenPlain = active?.rewritten ? toPlainText(active.rewritten) : "";
+  const rewrittenWords = editing ? countWords(draft) : countWords(rewrittenPlain);
+  const drift = driftPercent(originalWords, rewrittenWords);
 
   const runRewrite = async (segment: Segment) => {
     const controller = new AbortController();
     abortRef.current = controller;
     setNotice([]);
-    setStream("");
     setEditing(false);
     setPhase("rewrite");
     updateSegment(segment.id, { status: "rewriting" });
 
     try {
-      const first = await runWithFallback(keys, provider, {
-        system: REWRITE_SYSTEM,
-        prompt: rewritePrompt(segment.original),
-        onDelta: (chunk) => setStream((prev) => prev + chunk),
-        signal: controller.signal,
-      });
+      const first = await callAiRouter(
+        { system: REWRITE_SYSTEM, prompt: rewritePrompt(segment.original) },
+        controller.signal,
+      );
 
       setPhase("parity");
-      setStream("");
-      let finalText = first.text;
+      let finalText = first.content;
       let parityNote = "Parity confirmed";
       try {
-        const audit = await runWithFallback(keys, provider, {
-          system: PARITY_SYSTEM,
-          prompt: parityPrompt(segment.original, first.text),
-          onDelta: (chunk) => setStream((prev) => prev + chunk),
-          signal: controller.signal,
-        });
-        if (!audit.text.trim().toUpperCase().startsWith("PARITY_OK")) {
-          const restored = parseProse(audit.text);
-          if (restored.length > 0) {
-            finalText = audit.text;
+        const audit = await callAiRouter(
+          { system: PARITY_SYSTEM, prompt: parityPrompt(segment.original, first.content) },
+          controller.signal,
+        );
+        if (!audit.content.trim().toUpperCase().startsWith("PARITY_OK")) {
+          if (parseProse(audit.content).length > 0) {
+            finalText = audit.content;
             parityNote = "Missing detail was re-injected before review";
           }
         }
@@ -154,21 +194,59 @@ function Workspace() {
       }
 
       const html = toParagraphHtml(finalText);
-      updateSegment(segment.id, { rewritten: html, status: "review", servedBy: first.servedBy });
-      setUsage(recordUsage(first.servedBy, countWords(html)));
-      setNotice([
-        `Served by ${first.servedBy}`,
-        parityNote,
-        ...first.attempts.filter((a) => a.error).map((a) => `${a.label}: ${a.error}`),
-      ]);
+      updateSegment(segment.id, {
+        rewritten: html,
+        status: "review",
+        ...(first.provider_used ? { servedBy: first.provider_used } : {}),
+      });
+      setNotice([`Served by ${first.provider_used ?? "unknown provider"}`, parityNote]);
     } catch (error) {
       updateSegment(segment.id, { status: segment.rewritten ? "review" : "pending" });
       setNotice([`Rewrite failed: ${(error as Error).message}`]);
     } finally {
       setPhase("idle");
-      setStream("");
       abortRef.current = null;
     }
+  };
+
+  const combineWithNext = () => {
+    if (!project || !active) return;
+    const index = project.segments.findIndex((s) => s.id === active.id);
+    const next = project.segments[index + 1];
+    if (!next) return;
+    const merged: Segment = {
+      id: active.id,
+      original: `${active.original}\n\n${next.original}`.trim(),
+      rewritten:
+        active.rewritten || next.rewritten
+          ? `${active.rewritten}\n${next.rewritten}`.trim()
+          : "",
+      status: "pending",
+    };
+    const segments = [
+      ...project.segments.slice(0, index),
+      merged,
+      ...project.segments.slice(index + 2),
+    ].map((segment, i) => ({ ...segment, id: i + 1 }));
+    const updated: Project = { ...project, segments };
+    setProject(updated);
+    setActiveId(merged.id);
+    setNotice(["Segments combined — rerun the rewrite for the merged block."]);
+  };
+
+  const mergeUnedited = () => {
+    if (!project) return;
+    const segments = project.segments.map((segment) =>
+      segment.rewritten
+        ? segment
+        : {
+            ...segment,
+            rewritten: `${toParagraphHtml(segment.original)}\n${VERIFIED_MARKER}`,
+            status: "verified" as const,
+          },
+    );
+    setProject({ ...project, segments });
+    setNotice(["Un-rewritten segments were merged into the manuscript as-is."]);
   };
 
   if (!loaded) {
@@ -179,39 +257,47 @@ function Workspace() {
     );
   }
 
+  const originalPanel = (
+    <div className="rounded-xl border border-border bg-card p-4">
+      <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Original text</p>
+      <p className="max-h-[55vh] overflow-y-auto whitespace-pre-wrap font-serif text-[15px] leading-relaxed">
+        {active?.original}
+      </p>
+    </div>
+  );
+
+  const rewritePanel = active?.rewritten ? (
+    <div className="rounded-xl border border-border bg-card p-4">
+      <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Rewritten</p>
+      <p className="max-h-[55vh] overflow-y-auto whitespace-pre-wrap font-serif text-[15px] leading-relaxed">
+        {rewrittenPlain}
+      </p>
+    </div>
+  ) : (
+    <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+      No rewrite yet for this segment.
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
           <div className="min-w-0">
-            <h1 className="truncate font-serif text-lg leading-tight">Novel Reconstruction Engine</h1>
+            <h1 className="truncate font-serif text-lg leading-tight">
+              Novel Reconstruction Engine
+            </h1>
             {project ? (
               <p className="truncate text-xs text-muted-foreground">
                 {project.fileName} · {project.segments.length} segments
               </p>
             ) : null}
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Select
-              value={provider}
-              onValueChange={(value) => {
-                setProvider(value as ProviderId);
-                savePreferredProvider(value as ProviderId);
-              }}
-            >
-              <SelectTrigger className="w-[130px] sm:w-[190px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(PROVIDER_LABELS) as ProviderId[]).map((id) => (
-                  <SelectItem key={id} value={id}>
-                    {PROVIDER_LABELS[id]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <AiKeysDialog keys={keys} onChange={setKeys} usage={usage} onUsageChange={setUsage} />
-          </div>
+          {project ? (
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {verifiedCount}/{project.segments.length} verified
+            </span>
+          ) : null}
         </div>
       </header>
 
@@ -234,7 +320,7 @@ function Workspace() {
                   </span>
                 </div>
                 <Progress value={(verifiedCount / project.segments.length) * 100} />
-                <div className="max-h-[38vh] space-y-1 overflow-y-auto pr-1 lg:max-h-[52vh]">
+                <div className="max-h-[30vh] space-y-1 overflow-y-auto pr-1 lg:max-h-[52vh]">
                   {project.segments.map((segment) => (
                     <button
                       key={segment.id}
@@ -277,53 +363,62 @@ function Workspace() {
               <section className="space-y-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="font-serif text-xl">Segment {active.id}</h2>
-                  <span className="text-xs text-muted-foreground">
-                    {countWords(active.original).toLocaleString()} words original
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_CLASS[active.status]}`}
+                  >
+                    {STATUS_LABEL[active.status]}
                   </span>
-                  <div className="ml-auto flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="hidden sm:inline-flex"
-                      onClick={() => setDiffMode(diffMode === "side" ? "stacked" : "side")}
-                      aria-label="Toggle diff layout"
-                    >
-                      {diffMode === "side" ? (
-                        <Rows2 className="size-4" />
-                      ) : (
-                        <Columns2 className="size-4" />
-                      )}
-                    </Button>
-                    <Button disabled={busy} onClick={() => void runRewrite(active)}>
-                      {busy ? (
-                        <Loader2 className="mr-2 size-4 animate-spin" />
-                      ) : active.rewritten ? (
-                        <RefreshCw className="mr-2 size-4" />
-                      ) : (
-                        <Sparkles className="mr-2 size-4" />
-                      )}
-                      {active.rewritten ? "Rewrite again" : "Rewrite segment"}
-                    </Button>
-                  </div>
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <WordMeter label="Original" words={originalWords} />
+                  <WordMeter label="Rewrite" words={rewrittenWords} drift={drift} />
+                </div>
+                {Math.abs(drift) > 5 && rewrittenWords > 0 ? (
+                  <p className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    <AlertTriangle className="size-4 shrink-0" />
+                    Word count differs from the original by {Math.abs(drift).toFixed(1)}% — check for
+                    condensed or dropped material.
+                  </p>
+                ) : null}
+
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                  <Button
+                    className="col-span-2 sm:col-auto"
+                    disabled={busy}
+                    onClick={() => void runRewrite(active)}
+                  >
+                    {busy ? (
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                    ) : active.rewritten ? (
+                      <RefreshCw className="mr-2 size-4" />
+                    ) : (
+                      <Sparkles className="mr-2 size-4" />
+                    )}
+                    {active.rewritten ? "Rerun segment" : "Rewrite segment"}
+                  </Button>
+                  <Button variant="outline" disabled={busy} onClick={combineWithNext}>
+                    <Combine className="mr-2 size-4" />
+                    Combine
+                  </Button>
+                  <Button variant="outline" disabled={busy} onClick={mergeUnedited}>
+                    <Merge className="mr-2 size-4" />
+                    Merge unedited
+                  </Button>
                 </div>
 
                 {busy ? (
-                  <div className="rounded-xl border border-border bg-card p-4">
-                    <p className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="size-4 animate-spin" />
-                      {phase === "rewrite" ? "Rewriting…" : "Checking detail parity…"}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="ml-auto"
-                        onClick={() => abortRef.current?.abort()}
-                      >
-                        Stop
-                      </Button>
-                    </p>
-                    <p className="max-h-56 overflow-y-auto whitespace-pre-wrap font-serif text-sm leading-relaxed text-muted-foreground">
-                      {stream.slice(-4000) || "Waiting for the first tokens…"}
-                    </p>
+                  <div className="flex items-center gap-2 rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
+                    <Loader2 className="size-4 animate-spin" />
+                    {phase === "rewrite" ? "Rewriting…" : "Checking detail parity…"}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="ml-auto"
+                      onClick={() => abortRef.current?.abort()}
+                    >
+                      Stop
+                    </Button>
                   </div>
                 ) : null}
 
@@ -335,35 +430,72 @@ function Workspace() {
                   </ul>
                 ) : null}
 
-                {active.rewritten && !busy ? (
-                  editing ? (
-                    <div className="space-y-2">
-                      <Textarea
-                        value={draft}
-                        onChange={(event) => setDraft(event.target.value)}
-                        className="min-h-[50vh] font-serif text-[15px] leading-relaxed"
-                      />
-                      <div className="flex gap-2">
-                        <Button
-                          onClick={() => {
-                            updateSegment(active.id, { rewritten: toParagraphHtml(draft) });
-                            setEditing(false);
-                          }}
-                        >
-                          Save edits
-                        </Button>
-                        <Button variant="ghost" onClick={() => setEditing(false)}>
-                          Cancel
-                        </Button>
-                      </div>
+                {editing ? (
+                  <div className="space-y-2">
+                    <Textarea
+                      value={draft}
+                      onChange={(event) => {
+                        setDraft(event.target.value);
+                        saveDraft(active.id, event.target.value);
+                      }}
+                      className="min-h-[45vh] font-serif text-[15px] leading-relaxed"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => {
+                          updateSegment(active.id, { rewritten: toParagraphHtml(draft) });
+                          clearDraft(active.id);
+                          setEditing(false);
+                        }}
+                      >
+                        Save edits
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={() => {
+                          clearDraft(active.id);
+                          setEditing(false);
+                        }}
+                      >
+                        Discard draft
+                      </Button>
                     </div>
-                  ) : (
-                    <>
-                      <DiffView
-                        original={active.original}
-                        rewritten={toPlainText(active.rewritten)}
-                        mode={diffMode}
-                      />
+                  </div>
+                ) : (
+                  <>
+                    {/* Mobile: tabbed Original vs Rewrite */}
+                    <div className="lg:hidden">
+                      <Tabs
+                        value={mobileTab}
+                        onValueChange={(value) => setMobileTab(value as "original" | "rewrite")}
+                      >
+                        <TabsList className="grid w-full grid-cols-2">
+                          <TabsTrigger value="original">Original</TabsTrigger>
+                          <TabsTrigger value="rewrite">Rewrite</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="original" className="mt-3">
+                          {originalPanel}
+                        </TabsContent>
+                        <TabsContent value="rewrite" className="mt-3">
+                          {rewritePanel}
+                        </TabsContent>
+                      </Tabs>
+                    </div>
+
+                    {/* Desktop: side-by-side review */}
+                    <div className="hidden lg:block">
+                      {active.rewritten ? (
+                        <DiffView
+                          original={active.original}
+                          rewritten={rewrittenPlain}
+                          mode="side"
+                        />
+                      ) : (
+                        originalPanel
+                      )}
+                    </div>
+
+                    {active.rewritten ? (
                       <div className="flex flex-wrap gap-2">
                         <Button
                           onClick={() =>
@@ -380,7 +512,7 @@ function Workspace() {
                         <Button
                           variant="outline"
                           onClick={() => {
-                            setDraft(toPlainText(active.rewritten));
+                            setDraft(rewrittenPlain);
                             setEditing(true);
                           }}
                         >
@@ -388,20 +520,9 @@ function Workspace() {
                           Edit before approving
                         </Button>
                       </div>
-                    </>
-                  )
-                ) : null}
-
-                {!active.rewritten && !busy ? (
-                  <div className="rounded-xl border border-border bg-card p-4">
-                    <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
-                      Original text
-                    </p>
-                    <p className="max-h-[50vh] overflow-y-auto whitespace-pre-wrap font-serif text-[15px] leading-relaxed">
-                      {active.original}
-                    </p>
-                  </div>
-                ) : null}
+                    ) : null}
+                  </>
+                )}
               </section>
             ) : null}
           </div>

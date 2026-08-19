@@ -14,8 +14,31 @@ OUTPUT FORMAT:
 - No preamble, no commentary, no headings, no page numbers, no headers or footers, no lists, no bold, no markdown, no filler.
 - The narrative begins immediately with the first <p>.`;
 
-export function rewritePrompt(original: string) {
-  return `Rewrite the following novel segment according to your rules. Return the complete rewritten segment as <p> blocks.\n\n---BEGIN SEGMENT---\n${original}\n---END SEGMENT---`;
+export function rewritePrompt(original: string, targetWords?: number) {
+  const lengthClause = targetWords
+    ? `\n\nLENGTH LOCK: The rewritten segment MUST be ${targetWords.toLocaleString()} words (±2%, i.e. between ${Math.round(targetWords * 0.98).toLocaleString()} and ${Math.round(targetWords * 1.02).toLocaleString()} words). Expand description, interiority and sensory texture to reach the target — never add new events, and never cut existing ones.`
+    : "";
+  const typography = `\n\nTYPOGRAPHY LOCK: Use curly quotes (\u201c \u201d \u2018 \u2019) and em-dashes (\u2014) with no spaces around them. One <p> per paragraph, no blank lines, no manual indentation.`;
+  return `Rewrite the following novel segment according to your rules. Return the complete rewritten segment as <p> blocks.${lengthClause}${typography}\n\n---BEGIN SEGMENT---\n${original}\n---END SEGMENT---`;
+}
+
+export const LENGTH_SYSTEM = `You are a manuscript length technician. You adjust a finished novel rewrite so it lands on an exact word count.
+
+- NEVER remove plot points, dialogue, characters, emotional beats or explicit detail.
+- To expand: deepen description, interiority, sensory texture and beat-level pacing.
+- To trim: tighten redundant phrasing and filler words only.
+- Preserve voice, tense, order of events and typography (curly quotes, em-dashes with no spaces).
+- Output ONLY the full adjusted text as <p> blocks. No commentary.`;
+
+export function lengthPrompt(
+  text: string,
+  currentWords: number,
+  targetWords: number,
+  mode: "expand" | "trim",
+) {
+  return `The text below is ${currentWords.toLocaleString()} words. ${
+    mode === "expand" ? "Expand" : "Trim"
+  } it to exactly ${targetWords.toLocaleString()} words (±2%). Output the FULL adjusted text as <p> blocks.\n\n---TEXT---\n${text}\n---END TEXT---`;
 }
 
 export const PARITY_SYSTEM = `You are a parity auditor for a novel rewrite. You compare an ORIGINAL segment against a REWRITE and restore anything lost.

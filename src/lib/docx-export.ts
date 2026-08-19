@@ -52,8 +52,8 @@ export async function buildDocx(project: Project, paragraphs: string[]): Promise
   for (const text of paragraphs) {
     children.push(
       new Paragraph({
-        spacing: { after: 160, line: 340 },
-        indent: { firstLine: 360 },
+        spacing: { after: 0, line: 480 },
+        indent: { firstLine: 720 },
         children: [new TextRun({ text, font: "Georgia", size: 24 })],
       }),
     );

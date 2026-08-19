@@ -12,6 +12,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { CompilePanel } from "@/components/CompilePanel";
+import { FormatPanel } from "@/components/FormatPanel";
 import { DiffView } from "@/components/DiffView";
 import { UploadPanel } from "@/components/UploadPanel";
 import { Button } from "@/components/ui/button";
@@ -20,13 +21,27 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { callAiRouter } from "@/lib/ai-client";
 import {
+  applyFormatLock,
+  checkLength,
+  DEFAULT_WORDS_PER_PAGE,
+  pagesFromWords,
+  targetWordsFor,
+} from "@/lib/format-lock";
+import {
   autosaveProject,
   clearDraft,
   loadAutosavedProject,
   loadDraft,
   saveDraft,
 } from "@/lib/local-drafts";
-import { PARITY_SYSTEM, parityPrompt, REWRITE_SYSTEM, rewritePrompt } from "@/lib/prompts";
+import {
+  LENGTH_SYSTEM,
+  lengthPrompt,
+  PARITY_SYSTEM,
+  parityPrompt,
+  REWRITE_SYSTEM,
+  rewritePrompt,
+} from "@/lib/prompts";
 import { useProject, type Project, type Segment } from "@/lib/project-store";
 import { countWords, parseProse, VERIFIED_MARKER } from "@/lib/segments";
 
@@ -113,7 +128,7 @@ function WordMeter({
 function Workspace() {
   const { project, loaded, setProject, updateSegment } = useProject();
   const [activeId, setActiveId] = useState(1);
-  const [phase, setPhase] = useState<"idle" | "rewrite" | "parity">("idle");
+  const [phase, setPhase] = useState<"idle" | "rewrite" | "parity" | "length">("idle");
   const [notice, setNotice] = useState<string[]>([]);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -160,6 +175,12 @@ function Workspace() {
   const rewrittenPlain = active?.rewritten ? toPlainText(active.rewritten) : "";
   const rewrittenWords = editing ? countWords(draft) : countWords(rewrittenPlain);
   const drift = driftPercent(originalWords, rewrittenWords);
+  const wordsPerPage = project?.wordsPerPage ?? DEFAULT_WORDS_PER_PAGE;
+  const naturalPages = Math.max(1, Math.round(originalWords / wordsPerPage));
+  const targetPages = active?.targetPages ?? naturalPages;
+  const targetWords = targetWordsFor(targetPages, wordsPerPage);
+  const currentPages = pagesFromWords(rewrittenWords, wordsPerPage);
+  const pageDrift = driftPercent(targetWords, rewrittenWords);
 
   const runRewrite = async (segment: Segment) => {
     const controller = new AbortController();
@@ -169,9 +190,15 @@ function Workspace() {
     setPhase("rewrite");
     updateSegment(segment.id, { status: "rewriting" });
 
+    const formatLock = project?.formatLock !== false;
+    const wpp = project?.wordsPerPage ?? DEFAULT_WORDS_PER_PAGE;
+    const pages =
+      segment.targetPages ?? Math.max(1, Math.round(countWords(segment.original) / wpp));
+    const target = targetWordsFor(pages, wpp);
+
     try {
       const first = await callAiRouter(
-        { system: REWRITE_SYSTEM, prompt: rewritePrompt(segment.original) },
+        { system: REWRITE_SYSTEM, prompt: rewritePrompt(segment.original, target) },
         controller.signal,
       );
 
@@ -193,13 +220,48 @@ function Workspace() {
         parityNote = `Parity pass unavailable: ${(error as Error).message}`;
       }
 
-      const html = toParagraphHtml(finalText);
+      // Page lockdown: trim or expand until the text lands inside ±2% of target.
+      const lengthNotes: string[] = [];
+      for (let pass = 0; pass < 2; pass++) {
+        const plain = parseProse(finalText).join("\n\n");
+        const check = checkLength(plain, target);
+        if (check.action === "ok") {
+          if (pass === 0) lengthNotes.push(`Length on target (${check.words.toLocaleString()} words)`);
+          break;
+        }
+        setPhase("length");
+        try {
+          const adjusted = await callAiRouter(
+            {
+              system: LENGTH_SYSTEM,
+              prompt: lengthPrompt(plain, check.words, target, check.action),
+            },
+            controller.signal,
+          );
+          if (parseProse(adjusted.content).length > 0) {
+            finalText = adjusted.content;
+            lengthNotes.push(
+              `${check.action === "expand" ? "Expanded" : "Trimmed"} from ${check.words.toLocaleString()} toward ${target.toLocaleString()} words`,
+            );
+          } else break;
+        } catch (error) {
+          lengthNotes.push(`Length pass failed: ${(error as Error).message}`);
+          break;
+        }
+      }
+
+      const html = formatLock ? applyFormatLock(finalText) : toParagraphHtml(finalText);
       updateSegment(segment.id, {
         rewritten: html,
         status: "review",
         ...(first.provider_used ? { servedBy: first.provider_used } : {}),
       });
-      setNotice([`Served by ${first.provider_used ?? "unknown provider"}`, parityNote]);
+      setNotice([
+        `Served by ${first.provider_used ?? "unknown provider"}`,
+        parityNote,
+        formatLock ? "Format Lock applied (curly quotes, em-dashes, indents)" : "Format Lock off",
+        ...lengthNotes,
+      ]);
     } catch (error) {
       updateSegment(segment.id, { status: segment.rewritten ? "review" : "pending" });
       setNotice([`Rewrite failed: ${(error as Error).message}`]);
@@ -344,6 +406,16 @@ function Workspace() {
                 </div>
               </div>
 
+              <FormatPanel
+                project={project}
+                segment={active}
+                originalWords={originalWords}
+                onProjectChange={setProject}
+                onSegmentChange={(patch) => {
+                  if (active) updateSegment(active.id, patch);
+                }}
+              />
+
               <CompilePanel project={project} onProjectChange={setProject} />
 
               <Button
@@ -373,6 +445,24 @@ function Workspace() {
                 <div className="grid gap-2 sm:grid-cols-2">
                   <WordMeter label="Original" words={originalWords} />
                   <WordMeter label="Rewrite" words={rewrittenWords} drift={drift} />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
+                  <span>
+                    Page target:{" "}
+                    <span className="font-medium text-foreground">{targetPages} pages</span> ·{" "}
+                    {targetWords.toLocaleString()} words @ {wordsPerPage}/page
+                  </span>
+                  {rewrittenWords > 0 ? (
+                    <span
+                      className={`ml-auto tabular-nums ${
+                        Math.abs(pageDrift) > 2 ? "text-destructive" : "text-muted-foreground"
+                      }`}
+                    >
+                      Now {currentPages.toFixed(1)} pages ({pageDrift > 0 ? "+" : ""}
+                      {pageDrift.toFixed(1)}%)
+                    </span>
+                  ) : null}
                 </div>
                 {Math.abs(drift) > 5 && rewrittenWords > 0 ? (
                   <p className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -410,7 +500,11 @@ function Workspace() {
                 {busy ? (
                   <div className="flex items-center gap-2 rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
                     <Loader2 className="size-4 animate-spin" />
-                    {phase === "rewrite" ? "Rewriting…" : "Checking detail parity…"}
+                    {phase === "rewrite"
+                      ? "Rewriting…"
+                      : phase === "parity"
+                        ? "Checking detail parity…"
+                        : "Locking to page target…"}
                     <Button
                       variant="ghost"
                       size="sm"

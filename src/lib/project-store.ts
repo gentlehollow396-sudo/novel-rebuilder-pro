@@ -9,6 +9,8 @@ export type Segment = {
   rewritten: string;
   status: SegmentStatus;
   servedBy?: string;
+  /** Exact page target for this segment; defaults to the original's natural length. */
+  targetPages?: number;
 };
 
 export type Project = {
@@ -16,6 +18,8 @@ export type Project = {
   createdAt: number;
   cover: string | null;
   stripHeadings: boolean;
+  formatLock?: boolean;
+  wordsPerPage?: number;
   segments: Segment[];
 };
 

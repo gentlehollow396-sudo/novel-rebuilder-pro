@@ -8,29 +8,22 @@ import { createFileRoute } from "@tanstack/react-router";
  * Returns: { id, content, provider_used, tokens: {...}, word_count }
  */
 
-// --- Hardcoded fallback service credentials (replace before deploying) ---
-const GEMINI_API_KEY = "PASTE_KEY_HERE";
-const GROQ_API_KEY = "PASTE_KEY_HERE";
-const CLOUDFLARE_API_KEY = "PASTE_KEY_HERE";
-const CLOUDFLARE_URL = "PASTE_URL_HERE";
-
-// OPENROUTER key comes from the environment (Deno.env.get when available).
+// All provider credentials come from the environment (Deno.env.get when available).
 function readEnv(name: string): string | undefined {
   const d = (globalThis as { Deno?: { env?: { get(n: string): string | undefined } } }).Deno;
   if (d?.env?.get) return d.env.get(name);
   return process.env[name];
 }
 
-type Provider = "lovable" | "openrouter" | "gemini" | "groq" | "cloudflare";
+type Provider = "lovable" | "openrouter" | "gemini" | "groq";
 
-const DEFAULT_ORDER: Provider[] = ["lovable", "openrouter", "gemini", "groq", "cloudflare"];
+const DEFAULT_ORDER: Provider[] = ["lovable", "openrouter", "gemini", "groq"];
 
 const MODELS: Record<Provider, string> = {
   lovable: "google/gemini-2.5-flash",
   openrouter: "anthropic/claude-sonnet-4.6",
   gemini: "gemini-2.5-flash",
   groq: "llama-3.3-70b-versatile",
-  cloudflare: "@cf/meta/llama-3.1-8b-instruct",
 };
 
 type Body = {
@@ -64,7 +57,7 @@ function wordCount(text: string): number {
 }
 
 function assertKey(key: string | undefined, provider: Provider): string {
-  if (!key || key === "PASTE_KEY_HERE" || key === "PASTE_URL_HERE") {
+  if (!key || !key.trim()) {
     throw new Error(`${provider}: API key is not configured`);
   }
   return key;
@@ -120,7 +113,7 @@ async function callGemini(
   maxTokens: number,
   temperature: number,
 ): Promise<Result> {
-  const key = assertKey(readEnv("GEMINI_API_KEY") ?? GEMINI_API_KEY, "gemini");
+  const key = assertKey(readEnv("GEMINI_API_KEY"), "gemini");
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
     {
@@ -158,42 +151,6 @@ async function callGemini(
   };
 }
 
-async function callCloudflare(
-  model: string,
-  system: string,
-  prompt: string,
-  maxTokens: number,
-  temperature: number,
-): Promise<Result> {
-  const key = assertKey(readEnv("CLOUDFLARE_API_KEY") ?? CLOUDFLARE_API_KEY, "cloudflare");
-  const base = (readEnv("CLOUDFLARE_URL") ?? CLOUDFLARE_URL).replace(/\/$/, "");
-  if (!base || base === "PASTE_URL_HERE") throw new Error("cloudflare: account URL is not configured");
-
-  const res = await fetch(`${base}/${model}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify({
-      max_tokens: maxTokens,
-      temperature,
-      messages: [
-        ...(system ? [{ role: "system", content: system }] : []),
-        { role: "user", content: prompt },
-      ],
-    }),
-  });
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status}: ${detail.slice(0, 300)}`);
-  }
-  const json = (await res.json()) as {
-    result?: { response?: string; usage?: unknown };
-  };
-  return {
-    content: json.result?.response ?? "",
-    tokens: usageFromOpenAI(json.result?.usage),
-  };
-}
-
 async function callProvider(
   provider: Provider,
   model: string,
@@ -228,7 +185,7 @@ async function callProvider(
     case "groq":
       return callOpenAICompatible(
         "https://api.groq.com/openai/v1/chat/completions",
-        assertKey(readEnv("GROQ_API_KEY") ?? GROQ_API_KEY, "groq"),
+        assertKey(readEnv("GROQ_API_KEY"), "groq"),
         model,
         system,
         prompt,
@@ -237,8 +194,6 @@ async function callProvider(
       );
     case "gemini":
       return callGemini(model, system, prompt, maxTokens, temperature);
-    case "cloudflare":
-      return callCloudflare(model, system, prompt, maxTokens, temperature);
   }
 }
 

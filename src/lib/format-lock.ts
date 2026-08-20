@@ -3,6 +3,46 @@ import { countWords, parseProse } from "./segments";
 export const DEFAULT_WORDS_PER_PAGE = 275;
 export const TARGET_TOLERANCE = 0.02; // ±2%
 
+export type RewriteLanguage =
+  | "English"
+  | "Spanish"
+  | "French"
+  | "German"
+  | "Italian"
+  | "Portuguese"
+  | "Japanese"
+  | "Chinese"
+  | "Other";
+
+export type DetailLevel = "standard" | "detailed" | "maximal";
+
+const LANGUAGE_MULTIPLIERS: Record<RewriteLanguage, number> = {
+  English: 1,
+  Spanish: 1.09,
+  French: 1.08,
+  German: 1.06,
+  Italian: 1.07,
+  Portuguese: 1.08,
+  Japanese: 1.12,
+  Chinese: 1.14,
+  Other: 1.05,
+};
+
+const DETAIL_MULTIPLIERS: Record<DetailLevel, number> = {
+  standard: 1,
+  detailed: 1.12,
+  maximal: 1.2,
+};
+
+export function defaultWordsPerPageFor(
+  language?: RewriteLanguage,
+  detailLevel?: DetailLevel,
+): number {
+  const languageMultiplier = LANGUAGE_MULTIPLIERS[language ?? "English"] ?? 1;
+  const detailMultiplier = DETAIL_MULTIPLIERS[detailLevel ?? "detailed"] ?? 1;
+  return Math.round(DEFAULT_WORDS_PER_PAGE * languageMultiplier * detailMultiplier);
+}
+
 /**
  * Manuscript typography lockdown. Applied to every provider's output so
  * OpenRouter, Gemini, Groq and Cloudflare all render identically.

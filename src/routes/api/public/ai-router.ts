@@ -33,6 +33,7 @@ type Body = {
   providerOrder?: string[];
   maxTokens?: number;
   temperature?: number;
+  userApiKeys?: { gemini?: string; groq?: string };
 };
 
 type Usage = { prompt_tokens: number; completion_tokens: number; total_tokens: number };
@@ -112,8 +113,9 @@ async function callGemini(
   prompt: string,
   maxTokens: number,
   temperature: number,
+  userApiKey?: string,
 ): Promise<Result> {
-  const key = assertKey(readEnv("GEMINI_API_KEY"), "gemini");
+  const key = assertKey(userApiKey || readEnv("GEMINI_API_KEY"), "gemini");
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
     {
@@ -158,6 +160,7 @@ async function callProvider(
   prompt: string,
   maxTokens: number,
   temperature: number,
+  userApiKeys: Body["userApiKeys"],
 ): Promise<Result> {
   switch (provider) {
     case "lovable":
@@ -185,7 +188,7 @@ async function callProvider(
     case "groq":
       return callOpenAICompatible(
         "https://api.groq.com/openai/v1/chat/completions",
-        assertKey(readEnv("GROQ_API_KEY"), "groq"),
+        assertKey(userApiKeys?.groq || readEnv("GROQ_API_KEY"), "groq"),
         model,
         system,
         prompt,
@@ -193,7 +196,7 @@ async function callProvider(
         temperature,
       );
     case "gemini":
-      return callGemini(model, system, prompt, maxTokens, temperature);
+      return callGemini(model, system, prompt, maxTokens, temperature, userApiKeys?.gemini);
   }
 }
 
@@ -215,10 +218,14 @@ export const Route = createFileRoute("/api/public/ai-router")({
         const temperature = Math.min(Math.max(body.temperature ?? 0.7, 0), 2);
 
         const requested = Array.isArray(body.providerOrder) ? body.providerOrder : [];
+        const userProviders = [
+          body.userApiKeys?.gemini ? "gemini" : "",
+          body.userApiKeys?.groq ? "groq" : "",
+        ].filter(Boolean);
         const order = requested.filter((p): p is Provider =>
           DEFAULT_ORDER.includes(p as Provider),
         );
-        const chain = order.length ? order : DEFAULT_ORDER;
+        const chain = [...new Set([...userProviders, ...(order.length ? order : DEFAULT_ORDER)])] as Provider[];
 
         const errors: { provider: Provider; error: string }[] = [];
 
@@ -232,6 +239,7 @@ export const Route = createFileRoute("/api/public/ai-router")({
               prompt,
               maxTokens,
               temperature,
+              body.userApiKeys,
             );
             if (!result.content.trim()) throw new Error("empty response");
             return Response.json({

@@ -1,9 +1,10 @@
 import { useRef, useState } from "react";
-import { Download, ImageUp, Loader2 } from "lucide-react";
+import { Download, FileText, ImageUp, Loader2, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { buildDocx, compileParagraphs, downloadBlob } from "@/lib/docx-export";
+import { buildPdf } from "@/lib/pdf-export";
 import { countWords } from "@/lib/segments";
 import type { Project } from "@/lib/project-store";
 
@@ -29,6 +30,17 @@ export function CompilePanel({ project, onProjectChange }: Props) {
       const paragraphs = compileParagraphs(project);
       const blob = await buildDocx(project, paragraphs);
       downloadBlob(blob, `${project.fileName || "manuscript"}.docx`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const exportPdf = async () => {
+    setBusy(true);
+    try {
+      const paragraphs = compileParagraphs(project);
+      const blob = await buildPdf(project, paragraphs);
+      downloadBlob(blob, `${project.fileName || "manuscript"}.pdf`);
     } finally {
       setBusy(false);
     }
@@ -88,10 +100,16 @@ export function CompilePanel({ project, onProjectChange }: Props) {
         </div>
       </div>
 
-      <Button className="w-full" disabled={busy || verified.length === 0} onClick={() => void exportDocx()}>
-        {busy ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Download className="mr-2 size-4" />}
-        Export DOCX
-      </Button>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Button disabled={busy || verified.length === 0} onClick={() => void exportDocx()}>
+          {busy ? <Loader2 className="mr-2 size-4 animate-spin" /> : <FileText className="mr-2 size-4" />}
+          Export DOCX
+        </Button>
+        <Button variant="outline" disabled={busy || verified.length === 0} onClick={() => void exportPdf()}>
+          {busy ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Printer className="mr-2 size-4" />}
+          Export PDF
+        </Button>
+      </div>
     </div>
   );
 }

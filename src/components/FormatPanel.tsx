@@ -8,7 +8,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DEFAULT_WORDS_PER_PAGE, targetWordsFor } from "@/lib/format-lock";
+import {
+  DEFAULT_WORDS_PER_PAGE,
+  defaultWordsPerPageFor,
+  targetWordsFor,
+  type DetailLevel,
+  type RewriteLanguage,
+} from "@/lib/format-lock";
 import type { Project, Segment } from "@/lib/project-store";
 
 type Props = {
@@ -26,7 +32,11 @@ export function FormatPanel({
   onProjectChange,
   onSegmentChange,
 }: Props) {
-  const wordsPerPage = project.wordsPerPage ?? DEFAULT_WORDS_PER_PAGE;
+  const effectiveWordsPerPage = defaultWordsPerPageFor(
+    project.rewriteLanguage,
+    project.detailLevel,
+  );
+  const wordsPerPage = project.wordsPerPage ?? effectiveWordsPerPage ?? DEFAULT_WORDS_PER_PAGE;
   const naturalPages = Math.max(1, Math.round(originalWords / wordsPerPage));
   const pages = segment?.targetPages ?? naturalPages;
   const targetWords = targetWordsFor(pages, wordsPerPage);
@@ -52,10 +62,69 @@ export function FormatPanel({
       </div>
 
       <div className="space-y-1">
+        <Label className="text-xs text-muted-foreground">Rewrite language</Label>
+        <Select
+          value={project.rewriteLanguage ?? "English"}
+          onValueChange={(value: RewriteLanguage) => {
+            const nextWordsPerPage = defaultWordsPerPageFor(value, project.detailLevel ?? "detailed");
+            onProjectChange({
+              ...project,
+              rewriteLanguage: value,
+              wordsPerPage: nextWordsPerPage,
+            });
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="English">English</SelectItem>
+            <SelectItem value="Spanish">Spanish</SelectItem>
+            <SelectItem value="French">French</SelectItem>
+            <SelectItem value="German">German</SelectItem>
+            <SelectItem value="Italian">Italian</SelectItem>
+            <SelectItem value="Portuguese">Portuguese</SelectItem>
+            <SelectItem value="Japanese">Japanese</SelectItem>
+            <SelectItem value="Chinese">Chinese</SelectItem>
+            <SelectItem value="Other">Other</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-1">
+        <Label className="text-xs text-muted-foreground">Detail level</Label>
+        <Select
+          value={project.detailLevel ?? "detailed"}
+          onValueChange={(value: DetailLevel) => {
+            const nextWordsPerPage = defaultWordsPerPageFor(
+              project.rewriteLanguage ?? "English",
+              value,
+            );
+            onProjectChange({
+              ...project,
+              detailLevel: value,
+              wordsPerPage: nextWordsPerPage,
+            });
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="standard">Standard</SelectItem>
+            <SelectItem value="detailed">Detailed</SelectItem>
+            <SelectItem value="maximal">Maximal</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-1">
         <Label className="text-xs text-muted-foreground">Words per page</Label>
         <Select
           value={String(wordsPerPage)}
-          onValueChange={(value) => onProjectChange({ ...project, wordsPerPage: Number(value) })}
+          onValueChange={(value) =>
+            onProjectChange({ ...project, wordsPerPage: Number(value) })
+          }
         >
           <SelectTrigger>
             <SelectValue />
@@ -64,6 +133,9 @@ export function FormatPanel({
             <SelectItem value="250">250 (double-spaced standard)</SelectItem>
             <SelectItem value="275">275 (manuscript average)</SelectItem>
             <SelectItem value="300">300 (dense)</SelectItem>
+            <SelectItem value={String(effectiveWordsPerPage)}>
+              {effectiveWordsPerPage} (default for {project.rewriteLanguage ?? "English"}/{project.detailLevel ?? "detailed"})
+            </SelectItem>
           </SelectContent>
         </Select>
       </div>

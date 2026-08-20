@@ -1,3 +1,5 @@
+import { loadUserApiKeys } from "./user-api-keys";
+
 export type RouterResponse = {
   id: string;
   content: string;
@@ -14,7 +16,7 @@ export async function callAiRouter(
   const res = await fetch("/api/public/ai-router", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, userApiKeys: loadUserApiKeys() }),
     signal: signal ?? null,
   });
 

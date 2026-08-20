@@ -12,6 +12,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { CompilePanel } from "@/components/CompilePanel";
+import { ApiKeyDialog } from "@/components/ApiKeyDialog";
 import { FormatPanel } from "@/components/FormatPanel";
 import { DiffView } from "@/components/DiffView";
 import { UploadPanel } from "@/components/UploadPanel";
@@ -132,6 +133,7 @@ function Workspace() {
   const [notice, setNotice] = useState<string[]>([]);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
+  const [processingWords, setProcessingWords] = useState(0);
   const [mobileTab, setMobileTab] = useState<"original" | "rewrite">("rewrite");
   const abortRef = useRef<AbortController | null>(null);
   const restored = useRef(false);
@@ -174,13 +176,40 @@ function Workspace() {
   const originalWords = active ? countWords(active.original) : 0;
   const rewrittenPlain = active?.rewritten ? toPlainText(active.rewritten) : "";
   const rewrittenWords = editing ? countWords(draft) : countWords(rewrittenPlain);
+  const liveRewriteWords = phase !== "idle" ? processingWords : rewrittenWords;
   const drift = driftPercent(originalWords, rewrittenWords);
   const wordsPerPage = project?.wordsPerPage ?? DEFAULT_WORDS_PER_PAGE;
   const naturalPages = Math.max(1, Math.round(originalWords / wordsPerPage));
   const targetPages = active?.targetPages ?? naturalPages;
   const targetWords = targetWordsFor(targetPages, wordsPerPage);
   const currentPages = pagesFromWords(rewrittenWords, wordsPerPage);
-  const pageDrift = driftPercent(targetWords, rewrittenWords);
+  const pageDrift = driftPercent(targetWords, liveRewriteWords);
+
+  useEffect(() => {
+    if (phase === "idle") {
+      setProcessingWords(rewrittenWords);
+      return;
+    }
+
+    const start = Date.now();
+    const tick = () => {
+      const elapsed = Date.now() - start;
+      const span = Math.max(1000, targetWords - originalWords || 1);
+      const progress = Math.min(1, elapsed / 2400);
+      const nextWords = Math.max(
+        originalWords,
+        Math.min(targetWords, Math.round(originalWords + (targetWords - originalWords) * progress)),
+      );
+      setProcessingWords(nextWords);
+      if (phase !== "idle") {
+        const nextDelay = Math.max(180, Math.min(320, span / 14));
+        window.setTimeout(tick, nextDelay);
+      }
+    };
+
+    const timer = window.setTimeout(tick, 220);
+    return () => window.clearTimeout(timer);
+  }, [phase, targetWords, originalWords, rewrittenWords]);
 
   const runRewrite = async (segment: Segment) => {
     const controller = new AbortController();
@@ -355,11 +384,14 @@ function Workspace() {
               </p>
             ) : null}
           </div>
-          {project ? (
-            <span className="shrink-0 text-xs text-muted-foreground">
-              {verifiedCount}/{project.segments.length} verified
-            </span>
-          ) : null}
+          <div className="flex shrink-0 items-center gap-2">
+            <ApiKeyDialog />
+            {project ? (
+              <span className="hidden text-xs text-muted-foreground sm:inline">
+                {verifiedCount}/{project.segments.length} verified
+              </span>
+            ) : null}
+          </div>
         </div>
       </header>
 
@@ -444,7 +476,11 @@ function Workspace() {
 
                 <div className="grid gap-2 sm:grid-cols-2">
                   <WordMeter label="Original" words={originalWords} />
-                  <WordMeter label="Rewrite" words={rewrittenWords} drift={drift} />
+                  <WordMeter
+                    label="Rewrite"
+                    words={liveRewriteWords}
+                    drift={driftPercent(originalWords, liveRewriteWords)}
+                  />
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
@@ -505,6 +541,9 @@ function Workspace() {
                       : phase === "parity"
                         ? "Checking detail parity…"
                         : "Locking to page target…"}
+                    <span className="ml-2 tabular-nums font-medium text-foreground">
+                      {processingWords.toLocaleString()} / {targetWords.toLocaleString()} words
+                    </span>
                     <Button
                       variant="ghost"
                       size="sm"

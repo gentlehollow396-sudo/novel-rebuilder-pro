@@ -1,5 +1,6 @@
 import { get, set, del } from "idb-keyval";
 import { useCallback, useEffect, useState } from "react";
+import type { DetailLevel, RewriteLanguage } from "@/lib/format-lock";
 
 export type SegmentStatus = "pending" | "rewriting" | "review" | "verified";
 
@@ -20,6 +21,8 @@ export type Project = {
   stripHeadings: boolean;
   formatLock?: boolean;
   wordsPerPage?: number;
+  rewriteLanguage?: RewriteLanguage;
+  detailLevel?: DetailLevel;
   segments: Segment[];
 };
 

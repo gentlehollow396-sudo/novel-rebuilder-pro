@@ -2,6 +2,7 @@ import { countWords, parseProse } from "./segments";
 
 export const DEFAULT_WORDS_PER_PAGE = 275;
 export const TARGET_TOLERANCE = 0.02; // ±2%
+export const MAX_WORDS_OVER_TARGET = 2000;
 
 export type RewriteLanguage =
   | "English"
@@ -113,7 +114,9 @@ export type LengthCheck = {
 export function checkLength(text: string, target: number): LengthCheck {
   const words = countWords(text);
   const drift = target > 0 ? (words - target) / target : 0;
+  const minimum = Math.round(target * (1 - TARGET_TOLERANCE));
+  const maximum = target + MAX_WORDS_OVER_TARGET;
   const action =
-    Math.abs(drift) <= TARGET_TOLERANCE ? "ok" : drift < 0 ? "expand" : "trim";
+    words >= minimum && words <= maximum ? "ok" : words < minimum ? "expand" : "trim";
   return { words, target, drift, action };
 }

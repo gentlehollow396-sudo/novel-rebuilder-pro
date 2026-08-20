@@ -157,7 +157,8 @@ export function FormatPanel({
           }}
         />
         <p className="text-[11px] text-muted-foreground">
-          Locks the rewrite to {targetWords.toLocaleString()} words (±2%). Natural length:{" "}
+          Targets {targetWords.toLocaleString()} words, with up to 2,000 extra for detail. Natural
+          length:
           {naturalPages} pages.
         </p>
       </div>

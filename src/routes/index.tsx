@@ -249,7 +249,7 @@ function Workspace() {
         parityNote = `Parity pass unavailable: ${(error as Error).message}`;
       }
 
-      // Page lockdown: trim or expand until the text lands inside ±2% of target.
+      // Page lockdown: expand short text, but allow detail-driven text up to 2,000 words over target.
       const lengthNotes: string[] = [];
       for (let pass = 0; pass < 2; pass++) {
         const plain = parseProse(finalText).join("\n\n");

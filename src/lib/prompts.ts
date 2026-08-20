@@ -1,3 +1,5 @@
+import { MAX_WORDS_OVER_TARGET } from "./format-lock";
+
 export const REWRITE_SYSTEM = `You are the Novel Reconstruction Engine, a professional novelist and line editor.
 
 You rewrite raw novel text into polished, human-sounding literary prose.
@@ -16,7 +18,7 @@ OUTPUT FORMAT:
 
 export function rewritePrompt(original: string, targetWords?: number) {
   const lengthClause = targetWords
-    ? `\n\nLENGTH LOCK: The rewritten segment MUST be ${targetWords.toLocaleString()} words (±2%, i.e. between ${Math.round(targetWords * 0.98).toLocaleString()} and ${Math.round(targetWords * 1.02).toLocaleString()} words). Expand description, interiority and sensory texture to reach the target — never add new events, and never cut existing ones.`
+    ? `\n\nLENGTH GUIDANCE: Aim for at least ${Math.round(targetWords * 0.98).toLocaleString()} words and up to ${MAX_WORDS_OVER_TARGET.toLocaleString()} words over the ${targetWords.toLocaleString()}-word target, depending on the detail needed. Expand description, interiority and sensory texture when useful — never add new events, and never cut existing ones.`
     : "";
   const typography = `\n\nTYPOGRAPHY LOCK: Use curly quotes (\u201c \u201d \u2018 \u2019) and em-dashes (\u2014) with no spaces around them. One <p> per paragraph, no blank lines, no manual indentation.`;
   return `Rewrite the following novel segment according to your rules. Return the complete rewritten segment as <p> blocks.${lengthClause}${typography}\n\n---BEGIN SEGMENT---\n${original}\n---END SEGMENT---`;
@@ -36,9 +38,13 @@ export function lengthPrompt(
   targetWords: number,
   mode: "expand" | "trim",
 ) {
-  return `The text below is ${currentWords.toLocaleString()} words. ${
-    mode === "expand" ? "Expand" : "Trim"
-  } it to exactly ${targetWords.toLocaleString()} words (±2%). Output the FULL adjusted text as <p> blocks.\n\n---TEXT---\n${text}\n---END TEXT---`;
+  const minimumWords = Math.round(targetWords * 0.98);
+  const maximumWords = targetWords + MAX_WORDS_OVER_TARGET;
+  const instruction =
+    mode === "expand"
+      ? `Expand it to at least ${minimumWords.toLocaleString()} words, while allowing detail-driven expansion up to ${maximumWords.toLocaleString()} words.`
+      : `Trim it to no more than ${maximumWords.toLocaleString()} words without going below ${minimumWords.toLocaleString()} words.`;
+  return `The text below is ${currentWords.toLocaleString()} words. ${instruction} Output the FULL adjusted text as <p> blocks.\n\n---TEXT---\n${text}\n---END TEXT---`;
 }
 
 export const PARITY_SYSTEM = `You are a parity auditor for a novel rewrite. You compare an ORIGINAL segment against a REWRITE and restore anything lost.

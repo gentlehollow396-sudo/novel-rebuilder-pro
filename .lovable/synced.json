@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "exports": [
+    ".lovable/export/novel-reconstruction-engine-core-pipeline-2026-08-14.json"
+  ],
+  "steps": [
+    {
+      "name": "copy-exports",
+      "run": "./.lovable/update/run_lovable_update.sh",
+      "cwd": "./"
+    },
+    {
+      "name": "import-lovable",
+      "run": "./import.sh",
+      "cwd": "lovable-app"
+    },
+    {
+      "name": "post-import-check",
+      "run": "echo 'Replace provider placeholders with your deployed gateway worker URL (see .lovable/gateway/README.md) and run app tests'",
+      "cwd": "./"
+    }
+  ],
+  "notes": "This synced file instructs the lovable.dev update pipeline to import the export, run lovable-app/import.sh, and display a post-import reminder. Ensure the gateway worker is deployed and PROVIDER_* bindings are configured before running diagnostics from the browser.",
+  "generated_by": "copilot",
+  "generated_at": "2026-08-21T20:15:00Z"
+}

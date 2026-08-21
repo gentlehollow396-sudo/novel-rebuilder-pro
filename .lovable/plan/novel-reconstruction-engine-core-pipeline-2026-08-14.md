@@ -1,6 +1,6 @@
 # Novel Reconstruction Engine — Core Pipeline
 
-A single-page, mobile-first workspace that ingests a novel PDF, splits it into 10,000-word segments, rewrites each one with AI under human approval, and compiles the approved segments into a DOCX manuscript. Everything stays in the browser; AI keys never leave the device except to call the chosen provider.
+A single-page, mobile-first workspace that ingests a novel PDF, splits it into 10,000-word segments, rewrites each one with AI under human approval, and compiles the approved segments into a DOCX manu[...] 
 
 ## What gets built now
 
@@ -29,7 +29,7 @@ A single-page, mobile-first workspace that ingests a novel PDF, splits it into 1
 
 **5. Provider selection & fallback**
 - Dropdown: Gemini, OpenRouter, Cloudflare Workers AI, Groq, Open-source fallback.
-- Fallback order on failure or exhausted credits: user Gemini → user OpenRouter → user Cloudflare → user Groq → project Gemini → project OpenRouter → project Cloudflare → project Groq → free/open-source provider.
+- Fallback order on failure or exhausted credits: user Gemini → user OpenRouter → user Cloudflare → user Groq → project Gemini → project OpenRouter → project Cloudflare → project Gro[...]
 - Switching is silent and mid-flight; the rewrite is not interrupted and the UI reports which provider actually served it.
 - Retired-model errors (e.g. the Gemini 404 "no longer available to new users") are treated as provider failures and advance the chain immediately.
 
@@ -44,15 +44,42 @@ A single-page, mobile-first workspace that ingests a novel PDF, splits it into 1
 
 ## Deferred to a follow-up
 
-Patch mode (`[PATCH_PARAGRAPH]` targeted paragraph fixes), standalone `[INCORPORATE_MISSING_PIECES]` deep-rescan command, and PDF export. The parity re-injection built into the rewrite loop already covers the common case for missing detail.
+Patch mode (`[PATCH_PARAGRAPH]` targeted paragraph fixes), standalone `[INCORPORATE_MISSING_PIECES]` deep-rescan command, and PDF export. The parity re-injection built into the rewrite loop already co[...] 
 
 ## Technical notes
 
 - Stack: TanStack Start, single `/` route with panel-based UI; no backend tables since storage is browser-only.
 - PDF text extraction and page-1 rendering with `pdfjs-dist` loaded client-side only (dynamic import behind a hydration gate, since it is browser-only).
 - Segments, statuses, rewritten text, cover image, and usage counters in IndexedDB (via `idb-keyval`); API keys in local storage.
-- Provider calls: Gemini REST, OpenRouter (`https://openrouter.ai/api/v1`), Cloudflare Workers AI REST, Groq (OpenAI-compatible). When a user key exists the call goes direct from the browser with that key; when falling back to project keys the call is proxied through a server function so project secrets are never exposed.
+- Provider calls: Gemini REST, OpenRouter (`https://openrouter.ai/api/v1`), Cloudflare Workers AI REST, Groq (OpenAI-compatible). When a user key exists the call goes direct from the browser with [...]
 - Project-key path and the free/open-source fallback use the Lovable AI gateway from a server function.
 - Long rewrites stream so a 10k-word segment does not stall behind a single buffered request.
 - DOCX generation with the `docx` package in-browser; cover embedded as an image on page one.
 - Design system: warm paper-and-ink manuscript palette with a serif display face for prose and a clean sans for UI chrome, defined as tokens in `src/styles.css`.
+
+## Recent changes (2026-08-21)
+
+- In-browser AI Troubleshooter added: `src/utils/troubleshooter.ts`, `src/components/TroubleshooterPanel.tsx`, `src/components/TroubleshooterIconBox.tsx`.
+  - Runs lightweight connectivity/latency checks (OPTIONS/GET), fetches provider usage/remaining-words when available, runs diagnostics in parallel, and recommends the fastest reachable provider.
+  - UI: Run diagnostics, Use fastest provider, per-provider Select. The Troubleshooter icon displays a red-dot when any provider is unreachable or reports zero remaining words.
+
+- Header integration: `HeaderWithTroubleshooter` (`src/components/HeaderWithTroubleshooter.tsx`) wired into the app shell (`src/App.tsx`).
+  - Selected provider persisted in localStorage (`novelrebuilder.selectedProviderId`).
+  - Place the component in your real layout or replace your existing header with this component; pass your real provider list via the `providers` prop.
+
+- Parity detection updated to absolute cutoff: `src/utils/rewriteParity.ts` now flags rewrites that remove >= 1,000 words from the original (instead of a percentage).
+  - When triggered, the parity handler can suggest or auto-select the fastest provider (using the Troubleshooter diagnostics) for the next rewrite attempt.
+  - The parity handler will not switch providers mid-request; it selects for the next attempt only.
+
+- Wiring: `HeaderWithTroubleshooter` is connected in `src/App.tsx` with example provider placeholders. Replace these placeholder endpoints with CORS-friendly or Lovable gateway endpoints that return a normalized JSON shape for usage (recommended: `{ remainingWords: number }`).
+
+- UX guidance:
+  - Show an inline warning in the diff when a rewrite removes >= 1,000 words. Offer actions: Regenerate, Auto-retry with fastest provider, Edit then approve, or Approve anyway.
+  - Don’t silently switch provider mid-flight — switch for the next rewrite attempt and surface progress to the user.
+  - Diagnostics may return false negatives due to CORS/timeouts; provide gateway/proxied test endpoints when necessary.
+
+- Next recommended steps:
+  - Replace placeholder provider test/usage endpoints with normalized gateway endpoints.
+  - Add an inline ">=1000 words removed" warning in the diff view with an "Auto-retry with fastest provider" button wired to `handleRewriteResult` and your rewrite flow.
+  - Persist diagnostics results (timestamped) to show "last-checked" and avoid unnecessary re-runs.
+

@@ -530,6 +530,30 @@ function Workspace() {
                     </span>
                   ) : null}
                 </div>
+
+                <div
+                  className={`flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-xs ${
+                    dialogueMissing > 0 && rewrittenWords > 0
+                      ? "border-destructive/40 bg-destructive/10 text-destructive"
+                      : "border-border bg-card text-muted-foreground"
+                  }`}
+                >
+                  {dialogueMissing > 0 && rewrittenWords > 0 ? (
+                    <AlertTriangle className="size-4 shrink-0" />
+                  ) : (
+                    <MessagesSquare className="size-4 shrink-0" />
+                  )}
+                  <span className="tabular-nums">
+                    Dialogue lines {rewrittenWords > 0 ? rewrittenDialogue : "—"} /{" "}
+                    {originalDialogue} in original
+                  </span>
+                  {dialogueMissing > 0 && rewrittenWords > 0 ? (
+                    <span className="ml-auto">
+                      {dialogueMissing} spoken line(s) may be missing
+                    </span>
+                  ) : null}
+                </div>
+
                 {Math.abs(drift) > 5 && rewrittenWords > 0 ? (
                   <p className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
                     <AlertTriangle className="size-4 shrink-0" />
@@ -553,6 +577,16 @@ function Workspace() {
                     )}
                     {active.rewritten ? "Rerun segment" : "Rewrite segment"}
                   </Button>
+                  <Button
+                    variant="secondary"
+                    className="col-span-2 sm:col-auto"
+                    disabled={busy}
+                    onClick={() => void runAllRemaining()}
+                  >
+                    <PlayCircle className="mr-2 size-4" />
+                    Run all remaining
+                  </Button>
+
                   <Button variant="outline" disabled={busy} onClick={combineWithNext}>
                     <Combine className="mr-2 size-4" />
                     Combine

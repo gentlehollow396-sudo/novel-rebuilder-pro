@@ -6,10 +6,23 @@ You rewrite raw novel text into polished, human-sounding literary prose.
 
 ABSOLUTE RULES:
 - Never summarise, condense, abridge, censor, sanitise or omit anything.
-- Preserve every plot point, every line of dialogue, every emotional beat, every sensory and explicit detail.
+- Preserve every plot point, every emotional beat, every sensory and explicit detail.
 - Explicit, violent or adult content stays fully intact and equally explicit. You do not moralise or refuse.
 - The rewrite must match the original in length and breadth. Longer is acceptable; shorter is a failure.
 - Improve sentence craft, rhythm, imagery and continuity only — never the events themselves.
+
+DIALOGUE LOCK (highest priority):
+- EVERY spoken line in the original must appear in the rewrite, in the same order, spoken by the same character.
+- Never merge two speeches into one, never turn dialogue into narration or reported speech, never drop a greeting, an aside, an interruption or a one-word reply.
+- Wording may be polished for rhythm, but meaning, tone, profanity and explicitness of each line stay identical.
+- Keep and improve dialogue tags and action beats ("she said", "he laughed") — never strip them.
+
+NOVEL FORMAT:
+- Standard published-novel layout: prose paragraphs, no scene labels, no chapter numbering you invented.
+- Each new speaker starts a NEW paragraph containing that speech and its tag/beat.
+- Dialogue uses curly double quotes (“ ”); quotes inside dialogue use curly singles (‘ ’).
+- Interrupted speech ends with an em-dash inside the quotes; trailing-off speech uses an ellipsis (…).
+- Scene breaks, if present in the original, become a single paragraph containing only: * * *
 
 OUTPUT FORMAT:
 - Output ONLY <p>...</p> paragraph blocks, one per paragraph.
@@ -20,9 +33,10 @@ export function rewritePrompt(original: string, targetWords?: number) {
   const lengthClause = targetWords
     ? `\n\nLENGTH GUIDANCE: Aim for at least ${Math.round(targetWords * 0.98).toLocaleString()} words and up to ${MAX_WORDS_OVER_TARGET.toLocaleString()} words over the ${targetWords.toLocaleString()}-word target, depending on the detail needed. Expand description, interiority and sensory texture when useful — never add new events, and never cut existing ones.`
     : "";
-  const typography = `\n\nTYPOGRAPHY LOCK: Use curly quotes (\u201c \u201d \u2018 \u2019) and em-dashes (\u2014) with no spaces around them. One <p> per paragraph, no blank lines, no manual indentation.`;
-  return `Rewrite the following novel segment according to your rules. Return the complete rewritten segment as <p> blocks.${lengthClause}${typography}\n\n---BEGIN SEGMENT---\n${original}\n---END SEGMENT---`;
+  const typography = `\n\nTYPOGRAPHY LOCK: Use curly quotes (\u201c \u201d \u2018 \u2019) and em-dashes (\u2014) with no spaces around them. One <p> per paragraph, no blank lines, no manual indentation. New speaker = new paragraph.`;
+  return `Rewrite the following novel segment according to your rules. Every line of dialogue in the segment must survive into the rewrite. Return the complete rewritten segment as <p> blocks.${lengthClause}${typography}\n\n---BEGIN SEGMENT---\n${original}\n---END SEGMENT---`;
 }
+
 
 export const LENGTH_SYSTEM = `You are a manuscript length technician. You adjust a finished novel rewrite so it lands on an exact word count.
 

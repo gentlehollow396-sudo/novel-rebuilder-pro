@@ -6,6 +6,9 @@ import {
   Combine,
   Loader2,
   Merge,
+  MessagesSquare,
+  PlayCircle,
+
   Pencil,
   RefreshCw,
   Sparkles,
@@ -44,7 +47,13 @@ import {
   rewritePrompt,
 } from "@/lib/prompts";
 import { useProject, type Project, type Segment } from "@/lib/project-store";
-import { countWords, parseProse, VERIFIED_MARKER } from "@/lib/segments";
+import {
+  countDialogueLines,
+  countWords,
+  parseProse,
+  VERIFIED_MARKER,
+} from "@/lib/segments";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -133,7 +142,9 @@ function Workspace() {
   const [notice, setNotice] = useState<string[]>([]);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
-  const [processingWords, setProcessingWords] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
+  const [batch, setBatch] = useState<{ done: number; total: number } | null>(null);
+
   const [mobileTab, setMobileTab] = useState<"original" | "rewrite">("rewrite");
   const abortRef = useRef<AbortController | null>(null);
   const restored = useRef(false);
@@ -176,7 +187,7 @@ function Workspace() {
   const originalWords = active ? countWords(active.original) : 0;
   const rewrittenPlain = active?.rewritten ? toPlainText(active.rewritten) : "";
   const rewrittenWords = editing ? countWords(draft) : countWords(rewrittenPlain);
-  const liveRewriteWords = phase !== "idle" ? processingWords : rewrittenWords;
+  const liveRewriteWords = rewrittenWords;
   const drift = driftPercent(originalWords, rewrittenWords);
   const wordsPerPage = project?.wordsPerPage ?? DEFAULT_WORDS_PER_PAGE;
   const naturalPages = Math.max(1, Math.round(originalWords / wordsPerPage));
@@ -185,39 +196,32 @@ function Workspace() {
   const currentPages = pagesFromWords(rewrittenWords, wordsPerPage);
   const pageDrift = driftPercent(targetWords, liveRewriteWords);
 
+  const originalDialogue = active ? countDialogueLines(active.original) : 0;
+  const rewrittenDialogue = countDialogueLines(editing ? draft : rewrittenPlain);
+  const dialogueMissing = Math.max(0, originalDialogue - rewrittenDialogue);
+
+  // Live elapsed clock for the running pass, so every section is visibly timed.
   useEffect(() => {
     if (phase === "idle") {
-      setProcessingWords(rewrittenWords);
+      setElapsed(0);
       return;
     }
-
     const start = Date.now();
-    const tick = () => {
-      const elapsed = Date.now() - start;
-      const span = Math.max(1000, targetWords - originalWords || 1);
-      const progress = Math.min(1, elapsed / 2400);
-      const nextWords = Math.max(
-        originalWords,
-        Math.min(targetWords, Math.round(originalWords + (targetWords - originalWords) * progress)),
-      );
-      setProcessingWords(nextWords);
-      if (phase !== "idle") {
-        const nextDelay = Math.max(180, Math.min(320, span / 14));
-        window.setTimeout(tick, nextDelay);
-      }
-    };
+    setElapsed(0);
+    const id = window.setInterval(() => setElapsed((Date.now() - start) / 1000), 200);
+    return () => window.clearInterval(id);
+  }, [phase]);
 
-    const timer = window.setTimeout(tick, 220);
-    return () => window.clearTimeout(timer);
-  }, [phase, targetWords, originalWords, rewrittenWords]);
 
   const runRewrite = async (segment: Segment) => {
     const controller = new AbortController();
     abortRef.current = controller;
+    const startedAt = Date.now();
     setNotice([]);
     setEditing(false);
     setPhase("rewrite");
     updateSegment(segment.id, { status: "rewriting" });
+
 
     const formatLock = project?.formatLock !== false;
     const wpp = project?.wordsPerPage ?? DEFAULT_WORDS_PER_PAGE;
@@ -285,20 +289,49 @@ function Workspace() {
         status: "review",
         ...(first.provider_used ? { servedBy: first.provider_used } : {}),
       });
+      const spokenBefore = countDialogueLines(segment.original);
+      const spokenAfter = countDialogueLines(parseProse(html).join("\n\n"));
+      const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
       setNotice([
-        `Served by ${first.provider_used ?? "unknown provider"}`,
+        `Finished in ${seconds}s · served by ${first.provider_used ?? "unknown provider"}`,
         parityNote,
+        spokenAfter >= spokenBefore
+          ? `Dialogue intact (${spokenAfter}/${spokenBefore} spoken lines)`
+          : `Dialogue check: ${spokenBefore - spokenAfter} spoken line(s) may be missing — rerun or edit before approving`,
         formatLock ? "Format Lock applied (curly quotes, em-dashes, indents)" : "Format Lock off",
         ...lengthNotes,
       ]);
+      return true;
     } catch (error) {
       updateSegment(segment.id, { status: segment.rewritten ? "review" : "pending" });
       setNotice([`Rewrite failed: ${(error as Error).message}`]);
+      return false;
     } finally {
       setPhase("idle");
       abortRef.current = null;
     }
   };
+
+  /** Runs every remaining segment back to back, showing live timing for each. */
+  const runAllRemaining = async () => {
+    if (!project) return;
+    const queue = project.segments.filter((s) => s.status !== "verified" && !s.rewritten);
+    if (queue.length === 0) {
+      setNotice(["Every segment already has a rewrite."]);
+      return;
+    }
+    setBatch({ done: 0, total: queue.length });
+    for (let i = 0; i < queue.length; i++) {
+      const segment = queue[i];
+      if (!segment) break;
+      setActiveId(segment.id);
+      const ok = await runRewrite(segment);
+      setBatch({ done: i + 1, total: queue.length });
+      if (!ok) break;
+    }
+    setBatch(null);
+  };
+
 
   const combineWithNext = () => {
     if (!project || !active) return;
@@ -500,6 +533,30 @@ function Workspace() {
                     </span>
                   ) : null}
                 </div>
+
+                <div
+                  className={`flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-xs ${
+                    dialogueMissing > 0 && rewrittenWords > 0
+                      ? "border-destructive/40 bg-destructive/10 text-destructive"
+                      : "border-border bg-card text-muted-foreground"
+                  }`}
+                >
+                  {dialogueMissing > 0 && rewrittenWords > 0 ? (
+                    <AlertTriangle className="size-4 shrink-0" />
+                  ) : (
+                    <MessagesSquare className="size-4 shrink-0" />
+                  )}
+                  <span className="tabular-nums">
+                    Dialogue lines {rewrittenWords > 0 ? rewrittenDialogue : "—"} /{" "}
+                    {originalDialogue} in original
+                  </span>
+                  {dialogueMissing > 0 && rewrittenWords > 0 ? (
+                    <span className="ml-auto">
+                      {dialogueMissing} spoken line(s) may be missing
+                    </span>
+                  ) : null}
+                </div>
+
                 {Math.abs(drift) > 5 && rewrittenWords > 0 ? (
                   <p className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
                     <AlertTriangle className="size-4 shrink-0" />
@@ -523,6 +580,16 @@ function Workspace() {
                     )}
                     {active.rewritten ? "Rerun segment" : "Rewrite segment"}
                   </Button>
+                  <Button
+                    variant="secondary"
+                    className="col-span-2 sm:col-auto"
+                    disabled={busy}
+                    onClick={() => void runAllRemaining()}
+                  >
+                    <PlayCircle className="mr-2 size-4" />
+                    Run all remaining
+                  </Button>
+
                   <Button variant="outline" disabled={busy} onClick={combineWithNext}>
                     <Combine className="mr-2 size-4" />
                     Combine
@@ -534,16 +601,22 @@ function Workspace() {
                 </div>
 
                 {busy ? (
-                  <div className="flex items-center gap-2 rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
                     <Loader2 className="size-4 animate-spin" />
                     {phase === "rewrite"
                       ? "Rewriting…"
                       : phase === "parity"
-                        ? "Checking detail parity…"
+                        ? "Checking dialogue & detail parity…"
                         : "Locking to page target…"}
-                    <span className="ml-2 tabular-nums font-medium text-foreground">
-                      {processingWords.toLocaleString()} / {targetWords.toLocaleString()} words
+                    <span className="tabular-nums font-medium text-foreground">
+                      {elapsed.toFixed(1)}s elapsed
                     </span>
+                    {batch ? (
+                      <span className="tabular-nums">
+                        segment {Math.min(batch.done + 1, batch.total)} of {batch.total}
+                      </span>
+                    ) : null}
+                    <span className="tabular-nums">target {targetWords.toLocaleString()} words</span>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -554,6 +627,7 @@ function Workspace() {
                     </Button>
                   </div>
                 ) : null}
+
 
                 {notice.length > 0 ? (
                   <ul className="space-y-1 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">

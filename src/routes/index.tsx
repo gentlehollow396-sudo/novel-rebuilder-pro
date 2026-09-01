@@ -213,10 +213,12 @@ function Workspace() {
   const runRewrite = async (segment: Segment) => {
     const controller = new AbortController();
     abortRef.current = controller;
+    const startedAt = Date.now();
     setNotice([]);
     setEditing(false);
     setPhase("rewrite");
     updateSegment(segment.id, { status: "rewriting" });
+
 
     const formatLock = project?.formatLock !== false;
     const wpp = project?.wordsPerPage ?? DEFAULT_WORDS_PER_PAGE;

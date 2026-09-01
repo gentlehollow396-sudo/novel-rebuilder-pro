@@ -133,7 +133,9 @@ function Workspace() {
   const [notice, setNotice] = useState<string[]>([]);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
-  const [processingWords, setProcessingWords] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
+  const [batch, setBatch] = useState<{ done: number; total: number } | null>(null);
+
   const [mobileTab, setMobileTab] = useState<"original" | "rewrite">("rewrite");
   const abortRef = useRef<AbortController | null>(null);
   const restored = useRef(false);

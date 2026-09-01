@@ -533,16 +533,22 @@ function Workspace() {
                 </div>
 
                 {busy ? (
-                  <div className="flex items-center gap-2 rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
                     <Loader2 className="size-4 animate-spin" />
                     {phase === "rewrite"
                       ? "Rewriting…"
                       : phase === "parity"
-                        ? "Checking detail parity…"
+                        ? "Checking dialogue & detail parity…"
                         : "Locking to page target…"}
-                    <span className="ml-2 tabular-nums font-medium text-foreground">
-                      {processingWords.toLocaleString()} / {targetWords.toLocaleString()} words
+                    <span className="tabular-nums font-medium text-foreground">
+                      {elapsed.toFixed(1)}s elapsed
                     </span>
+                    {batch ? (
+                      <span className="tabular-nums">
+                        segment {Math.min(batch.done + 1, batch.total)} of {batch.total}
+                      </span>
+                    ) : null}
+                    <span className="tabular-nums">target {targetWords.toLocaleString()} words</span>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -553,6 +559,7 @@ function Workspace() {
                     </Button>
                   </div>
                 ) : null}
+
 
                 {notice.length > 0 ? (
                   <ul className="space-y-1 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">

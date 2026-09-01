@@ -44,7 +44,13 @@ import {
   rewritePrompt,
 } from "@/lib/prompts";
 import { useProject, type Project, type Segment } from "@/lib/project-store";
-import { countWords, parseProse, VERIFIED_MARKER } from "@/lib/segments";
+import {
+  countDialogueLines,
+  countWords,
+  parseProse,
+  VERIFIED_MARKER,
+} from "@/lib/segments";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({

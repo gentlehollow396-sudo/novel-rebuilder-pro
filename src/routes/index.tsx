@@ -176,7 +176,7 @@ function Workspace() {
   const originalWords = active ? countWords(active.original) : 0;
   const rewrittenPlain = active?.rewritten ? toPlainText(active.rewritten) : "";
   const rewrittenWords = editing ? countWords(draft) : countWords(rewrittenPlain);
-  const liveRewriteWords = phase !== "idle" ? processingWords : rewrittenWords;
+  const liveRewriteWords = rewrittenWords;
   const drift = driftPercent(originalWords, rewrittenWords);
   const wordsPerPage = project?.wordsPerPage ?? DEFAULT_WORDS_PER_PAGE;
   const naturalPages = Math.max(1, Math.round(originalWords / wordsPerPage));
@@ -185,31 +185,22 @@ function Workspace() {
   const currentPages = pagesFromWords(rewrittenWords, wordsPerPage);
   const pageDrift = driftPercent(targetWords, liveRewriteWords);
 
+  const originalDialogue = active ? countDialogueLines(active.original) : 0;
+  const rewrittenDialogue = countDialogueLines(editing ? draft : rewrittenPlain);
+  const dialogueMissing = Math.max(0, originalDialogue - rewrittenDialogue);
+
+  // Live elapsed clock for the running pass, so every section is visibly timed.
   useEffect(() => {
     if (phase === "idle") {
-      setProcessingWords(rewrittenWords);
+      setElapsed(0);
       return;
     }
-
     const start = Date.now();
-    const tick = () => {
-      const elapsed = Date.now() - start;
-      const span = Math.max(1000, targetWords - originalWords || 1);
-      const progress = Math.min(1, elapsed / 2400);
-      const nextWords = Math.max(
-        originalWords,
-        Math.min(targetWords, Math.round(originalWords + (targetWords - originalWords) * progress)),
-      );
-      setProcessingWords(nextWords);
-      if (phase !== "idle") {
-        const nextDelay = Math.max(180, Math.min(320, span / 14));
-        window.setTimeout(tick, nextDelay);
-      }
-    };
+    setElapsed(0);
+    const id = window.setInterval(() => setElapsed((Date.now() - start) / 1000), 200);
+    return () => window.clearInterval(id);
+  }, [phase]);
 
-    const timer = window.setTimeout(tick, 220);
-    return () => window.clearTimeout(timer);
-  }, [phase, targetWords, originalWords, rewrittenWords]);
 
   const runRewrite = async (segment: Segment) => {
     const controller = new AbortController();

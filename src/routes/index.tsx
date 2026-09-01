@@ -286,20 +286,49 @@ function Workspace() {
         status: "review",
         ...(first.provider_used ? { servedBy: first.provider_used } : {}),
       });
+      const spokenBefore = countDialogueLines(segment.original);
+      const spokenAfter = countDialogueLines(parseProse(html).join("\n\n"));
+      const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
       setNotice([
-        `Served by ${first.provider_used ?? "unknown provider"}`,
+        `Finished in ${seconds}s · served by ${first.provider_used ?? "unknown provider"}`,
         parityNote,
+        spokenAfter >= spokenBefore
+          ? `Dialogue intact (${spokenAfter}/${spokenBefore} spoken lines)`
+          : `Dialogue check: ${spokenBefore - spokenAfter} spoken line(s) may be missing — rerun or edit before approving`,
         formatLock ? "Format Lock applied (curly quotes, em-dashes, indents)" : "Format Lock off",
         ...lengthNotes,
       ]);
+      return true;
     } catch (error) {
       updateSegment(segment.id, { status: segment.rewritten ? "review" : "pending" });
       setNotice([`Rewrite failed: ${(error as Error).message}`]);
+      return false;
     } finally {
       setPhase("idle");
       abortRef.current = null;
     }
   };
+
+  /** Runs every remaining segment back to back, showing live timing for each. */
+  const runAllRemaining = async () => {
+    if (!project) return;
+    const queue = project.segments.filter((s) => s.status !== "verified" && !s.rewritten);
+    if (queue.length === 0) {
+      setNotice(["Every segment already has a rewrite."]);
+      return;
+    }
+    setBatch({ done: 0, total: queue.length });
+    for (let i = 0; i < queue.length; i++) {
+      const segment = queue[i];
+      if (!segment) break;
+      setActiveId(segment.id);
+      const ok = await runRewrite(segment);
+      setBatch({ done: i + 1, total: queue.length });
+      if (!ok) break;
+    }
+    setBatch(null);
+  };
+
 
   const combineWithNext = () => {
     if (!project || !active) return;

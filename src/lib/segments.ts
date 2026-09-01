@@ -77,3 +77,13 @@ export function parseProse(output: string): string[] {
 }
 
 export const VERIFIED_MARKER = "<!-- SEGMENT_VERIFIED_BY_AI -->";
+
+/**
+ * Counts spoken lines in a passage. A dialogue line is any run of text inside
+ * straight or curly double quotes; used to verify no speech is lost in a rewrite.
+ */
+export function countDialogueLines(text: string): number {
+  const normalized = text.replace(/[“”]/g, '"');
+  const matches = normalized.match(/"[^"]{1,4000}"/g);
+  return matches ? matches.filter((m) => m.replace(/"/g, "").trim().length > 0).length : 0;
+}

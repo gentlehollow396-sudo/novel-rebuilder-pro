@@ -64,7 +64,7 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Upload a novel PDF, split it into 10,000-word segments, rewrite each one into professional prose with full detail parity, and export a clean DOCX manuscript.",
+          "Upload a novel PDF, split it into 5,000-word segments, rewrite each one into professional prose with full detail parity, and export a clean DOCX manuscript.",
       },
       { property: "og:title", content: "Novel Reconstruction Engine" },
       {

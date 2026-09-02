@@ -55,15 +55,20 @@ export function lengthPrompt(
   currentWords: number,
   targetWords: number,
   mode: "expand" | "trim",
+  hardFloorWords?: number,
 ) {
-  const minimumWords = Math.round(targetWords * 0.98);
+  const minimumWords = Math.max(Math.round(targetWords * 0.98), hardFloorWords ?? 0);
   const maximumWords = targetWords + MAX_WORDS_OVER_TARGET;
   const instruction =
     mode === "expand"
-      ? `Expand it to at least ${minimumWords.toLocaleString()} words, while allowing detail-driven expansion up to ${maximumWords.toLocaleString()} words.`
-      : `Trim it to no more than ${maximumWords.toLocaleString()} words without going below ${minimumWords.toLocaleString()} words.`;
-  return `The text below is ${currentWords.toLocaleString()} words. ${instruction} Output the FULL adjusted text as <p> blocks.\n\n---TEXT---\n${text}\n---END TEXT---`;
+      ? `Expand it to at least ${minimumWords.toLocaleString()} words, while allowing detail-driven expansion up to ${maximumWords.toLocaleString()} words. Keep every existing line of dialogue exactly where it is.`
+      : `Trim it to no more than ${maximumWords.toLocaleString()} words without going below ${minimumWords.toLocaleString()} words. Never delete a line of dialogue — trim narration only.`;
+  const floorClause = hardFloorWords
+    ? ` HARD FLOOR: the result must never be below ${hardFloorWords.toLocaleString()} words.`
+    : "";
+  return `The text below is ${currentWords.toLocaleString()} words. ${instruction}${floorClause} Output the FULL adjusted text as <p> blocks.\n\n---TEXT---\n${text}\n---END TEXT---`;
 }
+
 
 export const PARITY_SYSTEM = `You are a parity auditor for a novel rewrite. You compare an ORIGINAL segment against a REWRITE and restore anything lost.
 

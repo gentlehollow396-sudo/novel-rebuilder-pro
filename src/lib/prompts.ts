@@ -29,13 +29,17 @@ OUTPUT FORMAT:
 - No preamble, no commentary, no headings, no page numbers, no headers or footers, no lists, no bold, no markdown, no filler.
 - The narrative begins immediately with the first <p>.`;
 
-export function rewritePrompt(original: string, targetWords?: number) {
+export function rewritePrompt(original: string, targetWords?: number, hardFloorWords?: number) {
   const lengthClause = targetWords
     ? `\n\nLENGTH GUIDANCE: Aim for at least ${Math.round(targetWords * 0.98).toLocaleString()} words and up to ${MAX_WORDS_OVER_TARGET.toLocaleString()} words over the ${targetWords.toLocaleString()}-word target, depending on the detail needed. Expand description, interiority and sensory texture when useful — never add new events, and never cut existing ones.`
     : "";
+  const floorClause = hardFloorWords
+    ? `\n\nHARD WORD FLOOR (non-negotiable): The rewrite must NEVER be shorter than ${hardFloorWords.toLocaleString()} words — that is 1,000 words below the original. Falling below this floor is a failed rewrite. If you approach the floor, deepen existing scenes rather than inventing events.`
+    : "";
   const typography = `\n\nTYPOGRAPHY LOCK: Use curly quotes (\u201c \u201d \u2018 \u2019) and em-dashes (\u2014) with no spaces around them. One <p> per paragraph, no blank lines, no manual indentation. New speaker = new paragraph.`;
-  return `Rewrite the following novel segment according to your rules. Every line of dialogue in the segment must survive into the rewrite. Return the complete rewritten segment as <p> blocks.${lengthClause}${typography}\n\n---BEGIN SEGMENT---\n${original}\n---END SEGMENT---`;
+  return `Rewrite the following novel segment according to your rules. Every line of dialogue in the segment must survive into the rewrite. Return the complete rewritten segment as <p> blocks.${lengthClause}${floorClause}${typography}\n\n---BEGIN SEGMENT---\n${original}\n---END SEGMENT---`;
 }
+
 
 
 export const LENGTH_SYSTEM = `You are a manuscript length technician. You adjust a finished novel rewrite so it lands on an exact word count.

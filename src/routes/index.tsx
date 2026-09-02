@@ -28,6 +28,8 @@ import {
   applyFormatLock,
   checkLength,
   DEFAULT_WORDS_PER_PAGE,
+  MAX_WORDS_UNDER_ORIGINAL,
+
   pagesFromWords,
   targetWordsFor,
 } from "@/lib/format-lock";

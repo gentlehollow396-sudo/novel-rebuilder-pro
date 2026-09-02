@@ -111,12 +111,13 @@ export type LengthCheck = {
   action: "ok" | "expand" | "trim";
 };
 
-export function checkLength(text: string, target: number): LengthCheck {
+export function checkLength(text: string, target: number, hardFloor = 0): LengthCheck {
   const words = countWords(text);
   const drift = target > 0 ? (words - target) / target : 0;
-  const minimum = Math.round(target * (1 - TARGET_TOLERANCE));
-  const maximum = target + MAX_WORDS_OVER_TARGET;
+  const minimum = Math.max(Math.round(target * (1 - TARGET_TOLERANCE)), hardFloor);
+  const maximum = Math.max(target + MAX_WORDS_OVER_TARGET, minimum);
   const action =
     words >= minimum && words <= maximum ? "ok" : words < minimum ? "expand" : "trim";
   return { words, target, drift, action };
 }
+

@@ -3,6 +3,9 @@ import { countWords, parseProse } from "./segments";
 export const DEFAULT_WORDS_PER_PAGE = 275;
 export const TARGET_TOLERANCE = 0.02; // ±2%
 export const MAX_WORDS_OVER_TARGET = 2000;
+/** A rewrite may never end up more than this many words below its original. */
+export const MAX_WORDS_UNDER_ORIGINAL = 1000;
+
 
 export type RewriteLanguage =
   | "English"

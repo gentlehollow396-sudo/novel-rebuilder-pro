@@ -28,6 +28,8 @@ import {
   applyFormatLock,
   checkLength,
   DEFAULT_WORDS_PER_PAGE,
+  MAX_WORDS_UNDER_ORIGINAL,
+
   pagesFromWords,
   targetWordsFor,
 } from "@/lib/format-lock";
@@ -62,7 +64,7 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Upload a novel PDF, split it into 10,000-word segments, rewrite each one into professional prose with full detail parity, and export a clean DOCX manuscript.",
+          "Upload a novel PDF, split it into 5,000-word segments, rewrite each one into professional prose with full detail parity, and export a clean DOCX manuscript.",
       },
       { property: "og:title", content: "Novel Reconstruction Engine" },
       {
@@ -225,13 +227,15 @@ function Workspace() {
 
     const formatLock = project?.formatLock !== false;
     const wpp = project?.wordsPerPage ?? DEFAULT_WORDS_PER_PAGE;
-    const pages =
-      segment.targetPages ?? Math.max(1, Math.round(countWords(segment.original) / wpp));
+    const sourceWords = countWords(segment.original);
+    const pages = segment.targetPages ?? Math.max(1, Math.round(sourceWords / wpp));
     const target = targetWordsFor(pages, wpp);
+    // Hardwired floor: a rewrite may never come in more than 1,000 words under the original.
+    const hardFloor = Math.max(0, sourceWords - MAX_WORDS_UNDER_ORIGINAL);
 
     try {
       const first = await callAiRouter(
-        { system: REWRITE_SYSTEM, prompt: rewritePrompt(segment.original, target) },
+        { system: REWRITE_SYSTEM, prompt: rewritePrompt(segment.original, target, hardFloor) },
         controller.signal,
       );
 
@@ -253,11 +257,11 @@ function Workspace() {
         parityNote = `Parity pass unavailable: ${(error as Error).message}`;
       }
 
-      // Page lockdown: expand short text, but allow detail-driven text up to 2,000 words over target.
+      // Page lockdown + hard word floor: expand until the text clears the floor.
       const lengthNotes: string[] = [];
-      for (let pass = 0; pass < 2; pass++) {
+      for (let pass = 0; pass < 3; pass++) {
         const plain = parseProse(finalText).join("\n\n");
-        const check = checkLength(plain, target);
+        const check = checkLength(plain, target, hardFloor);
         if (check.action === "ok") {
           if (pass === 0) lengthNotes.push(`Length on target (${check.words.toLocaleString()} words)`);
           break;
@@ -267,7 +271,7 @@ function Workspace() {
           const adjusted = await callAiRouter(
             {
               system: LENGTH_SYSTEM,
-              prompt: lengthPrompt(plain, check.words, target, check.action),
+              prompt: lengthPrompt(plain, check.words, target, check.action, hardFloor),
             },
             controller.signal,
           );
@@ -282,6 +286,14 @@ function Workspace() {
           break;
         }
       }
+
+      const finalWords = countWords(parseProse(finalText).join("\n\n"));
+      lengthNotes.push(
+        finalWords >= hardFloor
+          ? `Word floor held: ${finalWords.toLocaleString()} vs ${sourceWords.toLocaleString()} original (floor ${hardFloor.toLocaleString()})`
+          : `Below hard floor by ${(hardFloor - finalWords).toLocaleString()} words — rerun before approving`,
+      );
+
 
       const html = formatLock ? applyFormatLock(finalText) : toParagraphHtml(finalText);
       updateSegment(segment.id, {

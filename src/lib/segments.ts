@@ -1,4 +1,4 @@
-export const WORDS_PER_SEGMENT = 10000;
+export const WORDS_PER_SEGMENT = 5000;
 
 export function countWords(text: string) {
   const matches = text.trim().match(/\S+/g);

@@ -29,13 +29,17 @@ OUTPUT FORMAT:
 - No preamble, no commentary, no headings, no page numbers, no headers or footers, no lists, no bold, no markdown, no filler.
 - The narrative begins immediately with the first <p>.`;
 
-export function rewritePrompt(original: string, targetWords?: number) {
+export function rewritePrompt(original: string, targetWords?: number, hardFloorWords?: number) {
   const lengthClause = targetWords
     ? `\n\nLENGTH GUIDANCE: Aim for at least ${Math.round(targetWords * 0.98).toLocaleString()} words and up to ${MAX_WORDS_OVER_TARGET.toLocaleString()} words over the ${targetWords.toLocaleString()}-word target, depending on the detail needed. Expand description, interiority and sensory texture when useful — never add new events, and never cut existing ones.`
     : "";
+  const floorClause = hardFloorWords
+    ? `\n\nHARD WORD FLOOR (non-negotiable): The rewrite must NEVER be shorter than ${hardFloorWords.toLocaleString()} words — that is 1,000 words below the original. Falling below this floor is a failed rewrite. If you approach the floor, deepen existing scenes rather than inventing events.`
+    : "";
   const typography = `\n\nTYPOGRAPHY LOCK: Use curly quotes (\u201c \u201d \u2018 \u2019) and em-dashes (\u2014) with no spaces around them. One <p> per paragraph, no blank lines, no manual indentation. New speaker = new paragraph.`;
-  return `Rewrite the following novel segment according to your rules. Every line of dialogue in the segment must survive into the rewrite. Return the complete rewritten segment as <p> blocks.${lengthClause}${typography}\n\n---BEGIN SEGMENT---\n${original}\n---END SEGMENT---`;
+  return `Rewrite the following novel segment according to your rules. Every line of dialogue in the segment must survive into the rewrite. Return the complete rewritten segment as <p> blocks.${lengthClause}${floorClause}${typography}\n\n---BEGIN SEGMENT---\n${original}\n---END SEGMENT---`;
 }
+
 
 
 export const LENGTH_SYSTEM = `You are a manuscript length technician. You adjust a finished novel rewrite so it lands on an exact word count.
@@ -51,15 +55,20 @@ export function lengthPrompt(
   currentWords: number,
   targetWords: number,
   mode: "expand" | "trim",
+  hardFloorWords?: number,
 ) {
-  const minimumWords = Math.round(targetWords * 0.98);
+  const minimumWords = Math.max(Math.round(targetWords * 0.98), hardFloorWords ?? 0);
   const maximumWords = targetWords + MAX_WORDS_OVER_TARGET;
   const instruction =
     mode === "expand"
-      ? `Expand it to at least ${minimumWords.toLocaleString()} words, while allowing detail-driven expansion up to ${maximumWords.toLocaleString()} words.`
-      : `Trim it to no more than ${maximumWords.toLocaleString()} words without going below ${minimumWords.toLocaleString()} words.`;
-  return `The text below is ${currentWords.toLocaleString()} words. ${instruction} Output the FULL adjusted text as <p> blocks.\n\n---TEXT---\n${text}\n---END TEXT---`;
+      ? `Expand it to at least ${minimumWords.toLocaleString()} words, while allowing detail-driven expansion up to ${maximumWords.toLocaleString()} words. Keep every existing line of dialogue exactly where it is.`
+      : `Trim it to no more than ${maximumWords.toLocaleString()} words without going below ${minimumWords.toLocaleString()} words. Never delete a line of dialogue — trim narration only.`;
+  const floorClause = hardFloorWords
+    ? ` HARD FLOOR: the result must never be below ${hardFloorWords.toLocaleString()} words.`
+    : "";
+  return `The text below is ${currentWords.toLocaleString()} words. ${instruction}${floorClause} Output the FULL adjusted text as <p> blocks.\n\n---TEXT---\n${text}\n---END TEXT---`;
 }
+
 
 export const PARITY_SYSTEM = `You are a parity auditor for a novel rewrite. You compare an ORIGINAL segment against a REWRITE and restore anything lost.
 

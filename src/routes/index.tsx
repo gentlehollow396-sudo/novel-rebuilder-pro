@@ -348,9 +348,10 @@ function Workspace() {
       setNotice([
         `Finished in ${seconds}s · served by ${first.provider_used ?? "unknown provider"}`,
         parityNote,
+        ...dialogueNotes,
         spokenAfter >= spokenBefore
           ? `Dialogue intact (${spokenAfter}/${spokenBefore} spoken lines)`
-          : `Dialogue check: ${spokenBefore - spokenAfter} spoken line(s) may be missing — rerun or edit before approving`,
+          : `Dialogue check: ${spokenBefore - spokenAfter} spoken line(s) still missing after auto re-runs — edit before approving`,
         formatLock ? "Format Lock applied (curly quotes, em-dashes, indents)" : "Format Lock off",
         ...lengthNotes,
       ]);

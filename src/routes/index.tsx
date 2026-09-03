@@ -45,6 +45,8 @@ import {
   lengthPrompt,
   PARITY_SYSTEM,
   parityPrompt,
+  DIALOGUE_SYSTEM,
+  dialoguePrompt,
   REWRITE_SYSTEM,
   rewritePrompt,
 } from "@/lib/prompts";
@@ -140,7 +142,9 @@ function WordMeter({
 function Workspace() {
   const { project, loaded, setProject, updateSegment } = useProject();
   const [activeId, setActiveId] = useState(1);
-  const [phase, setPhase] = useState<"idle" | "rewrite" | "parity" | "length">("idle");
+  const [phase, setPhase] = useState<"idle" | "rewrite" | "parity" | "length" | "dialogue">(
+    "idle",
+  );
   const [notice, setNotice] = useState<string[]>([]);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -287,6 +291,43 @@ function Workspace() {
         }
       }
 
+      // Dialogue lockdown: if spoken lines came back short, automatically re-run a
+      // restoration pass (up to twice) instead of only warning the user.
+      const spokenBefore = countDialogueLines(segment.original);
+      const dialogueNotes: string[] = [];
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const plain = parseProse(finalText).join("\n\n");
+        const spokenNow = countDialogueLines(plain);
+        if (spokenNow >= spokenBefore) break;
+        setPhase("dialogue");
+        dialogueNotes.push(
+          `Auto re-run ${attempt + 1}: ${spokenBefore - spokenNow} spoken line(s) missing — restoring`,
+        );
+        try {
+          const repaired = await callAiRouter(
+            {
+              system: DIALOGUE_SYSTEM,
+              prompt: dialoguePrompt(segment.original, plain, spokenBefore, spokenNow),
+            },
+            controller.signal,
+          );
+          const repairedPlain = parseProse(repaired.content).join("\n\n");
+          if (
+            repairedPlain.length > 0 &&
+            countDialogueLines(repairedPlain) > spokenNow &&
+            countWords(repairedPlain) >= countWords(plain) * 0.9
+          ) {
+            finalText = repaired.content;
+          } else {
+            dialogueNotes.push("Restoration pass produced no usable gain — keeping best version");
+            break;
+          }
+        } catch (error) {
+          dialogueNotes.push(`Dialogue restoration failed: ${(error as Error).message}`);
+          break;
+        }
+      }
+
       const finalWords = countWords(parseProse(finalText).join("\n\n"));
       lengthNotes.push(
         finalWords >= hardFloor
@@ -295,21 +336,22 @@ function Workspace() {
       );
 
 
+
       const html = formatLock ? applyFormatLock(finalText) : toParagraphHtml(finalText);
       updateSegment(segment.id, {
         rewritten: html,
         status: "review",
         ...(first.provider_used ? { servedBy: first.provider_used } : {}),
       });
-      const spokenBefore = countDialogueLines(segment.original);
       const spokenAfter = countDialogueLines(parseProse(html).join("\n\n"));
       const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
       setNotice([
         `Finished in ${seconds}s · served by ${first.provider_used ?? "unknown provider"}`,
         parityNote,
+        ...dialogueNotes,
         spokenAfter >= spokenBefore
           ? `Dialogue intact (${spokenAfter}/${spokenBefore} spoken lines)`
-          : `Dialogue check: ${spokenBefore - spokenAfter} spoken line(s) may be missing — rerun or edit before approving`,
+          : `Dialogue check: ${spokenBefore - spokenAfter} spoken line(s) still missing after auto re-runs — edit before approving`,
         formatLock ? "Format Lock applied (curly quotes, em-dashes, indents)" : "Format Lock off",
         ...lengthNotes,
       ]);
@@ -619,7 +661,9 @@ function Workspace() {
                       ? "Rewriting…"
                       : phase === "parity"
                         ? "Checking dialogue & detail parity…"
-                        : "Locking to page target…"}
+                        : phase === "dialogue"
+                          ? "Restoring missing dialogue…"
+                          : "Locking to page target…"}
                     <span className="tabular-nums font-medium text-foreground">
                       {elapsed.toFixed(1)}s elapsed
                     </span>

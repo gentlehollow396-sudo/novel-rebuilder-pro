@@ -343,7 +343,6 @@ function Workspace() {
         status: "review",
         ...(first.provider_used ? { servedBy: first.provider_used } : {}),
       });
-      const spokenBefore = countDialogueLines(segment.original);
       const spokenAfter = countDialogueLines(parseProse(html).join("\n\n"));
       const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
       setNotice([

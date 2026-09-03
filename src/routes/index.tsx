@@ -785,6 +785,34 @@ function Workspace() {
                           <Pencil className="mr-2 size-4" />
                           Edit before approving
                         </Button>
+                        <Button
+                          variant="outline"
+                          disabled={exportingSegment}
+                          onClick={async () => {
+                            setExportingSegment(true);
+                            try {
+                              const index =
+                                project.segments.findIndex((s) => s.id === active.id) + 1;
+                              const blob = await buildDocx(
+                                { ...project, cover: null },
+                                parseProse(active.rewritten),
+                              );
+                              downloadBlob(
+                                blob,
+                                `${project.fileName || "manuscript"}-segment-${index}.docx`,
+                              );
+                            } finally {
+                              setExportingSegment(false);
+                            }
+                          }}
+                        >
+                          {exportingSegment ? (
+                            <Loader2 className="mr-2 size-4 animate-spin" />
+                          ) : (
+                            <FileText className="mr-2 size-4" />
+                          )}
+                          Export this segment
+                        </Button>
                       </div>
                     ) : null}
                   </>

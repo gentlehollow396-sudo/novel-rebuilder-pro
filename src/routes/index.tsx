@@ -149,6 +149,7 @@ function Workspace() {
   );
   const [notice, setNotice] = useState<string[]>([]);
   const [editing, setEditing] = useState(false);
+  const [exportingSegment, setExportingSegment] = useState(false);
   const [draft, setDraft] = useState("");
   const [elapsed, setElapsed] = useState(0);
   const [batch, setBatch] = useState<{ done: number; total: number } | null>(null);

@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Check,
   Combine,
+  FileText,
   Loader2,
   Merge,
   MessagesSquare,
@@ -24,6 +25,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { callAiRouter } from "@/lib/ai-client";
+import { buildDocx, downloadBlob } from "@/lib/docx-export";
 import {
   applyFormatLock,
   checkLength,
@@ -147,6 +149,7 @@ function Workspace() {
   );
   const [notice, setNotice] = useState<string[]>([]);
   const [editing, setEditing] = useState(false);
+  const [exportingSegment, setExportingSegment] = useState(false);
   const [draft, setDraft] = useState("");
   const [elapsed, setElapsed] = useState(0);
   const [batch, setBatch] = useState<{ done: number; total: number } | null>(null);
@@ -781,6 +784,34 @@ function Workspace() {
                         >
                           <Pencil className="mr-2 size-4" />
                           Edit before approving
+                        </Button>
+                        <Button
+                          variant="outline"
+                          disabled={exportingSegment}
+                          onClick={async () => {
+                            setExportingSegment(true);
+                            try {
+                              const index =
+                                project.segments.findIndex((s) => s.id === active.id) + 1;
+                              const blob = await buildDocx(
+                                { ...project, cover: null },
+                                parseProse(active.rewritten),
+                              );
+                              downloadBlob(
+                                blob,
+                                `${project.fileName || "manuscript"}-segment-${index}.docx`,
+                              );
+                            } finally {
+                              setExportingSegment(false);
+                            }
+                          }}
+                        >
+                          {exportingSegment ? (
+                            <Loader2 className="mr-2 size-4 animate-spin" />
+                          ) : (
+                            <FileText className="mr-2 size-4" />
+                          )}
+                          Export this segment
                         </Button>
                       </div>
                     ) : null}

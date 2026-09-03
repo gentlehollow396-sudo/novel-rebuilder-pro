@@ -25,6 +25,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { callAiRouter } from "@/lib/ai-client";
+import { buildDocx, downloadBlob } from "@/lib/docx-export";
 import {
   applyFormatLock,
   checkLength,

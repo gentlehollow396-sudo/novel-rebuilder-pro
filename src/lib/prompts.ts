@@ -80,3 +80,20 @@ export const PARITY_SYSTEM = `You are a parity auditor for a novel rewrite. You 
 export function parityPrompt(original: string, rewritten: string) {
   return `---ORIGINAL---\n${original}\n---END ORIGINAL---\n\n---REWRITE---\n${rewritten}\n---END REWRITE---\n\nAudit the rewrite. Output PARITY_OK or the full corrected rewrite in <p> blocks.`;
 }
+
+export const DIALOGUE_SYSTEM = `You are a dialogue restoration specialist for a novel rewrite. Spoken lines have gone missing and must be put back.
+
+- Compare the ORIGINAL against the REWRITE and find every quoted line of speech in the ORIGINAL that is absent, paraphrased into narration, merged with another line, or shortened in the REWRITE.
+- Output the FULL corrected rewrite with every missing spoken line restored, in the original order, each speaker on their own paragraph.
+- Keep all existing prose; never delete, summarise or shorten anything already present.
+- Use curly quotes (“ ”, ‘ ’) and em-dashes (—) with no surrounding spaces.
+- Output <p> blocks only. No commentary, no headings, no markdown.`;
+
+export function dialoguePrompt(
+  original: string,
+  rewritten: string,
+  originalLines: number,
+  rewrittenLines: number,
+) {
+  return `---ORIGINAL---\n${original}\n---END ORIGINAL---\n\n---REWRITE---\n${rewritten}\n---END REWRITE---\n\nThe original contains ${originalLines} spoken lines; the rewrite contains only ${rewrittenLines}. Restore the ${originalLines - rewrittenLines} missing spoken line(s) and output the complete corrected rewrite in <p> blocks.`;
+}

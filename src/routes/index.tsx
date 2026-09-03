@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Check,
   Combine,
+  FileText,
   Loader2,
   Merge,
   MessagesSquare,

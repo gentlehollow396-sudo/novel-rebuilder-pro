@@ -20,10 +20,10 @@ type Provider = "lovable" | "openrouter" | "gemini" | "groq";
 const DEFAULT_ORDER: Provider[] = ["lovable", "openrouter", "gemini", "groq"];
 
 const MODELS: Record<Provider, string> = {
-  lovable: "google/gemini-2.5-flash",
+  lovable: "google/gemini-3.6-flash",
   openrouter: "anthropic/claude-sonnet-4.6",
-  gemini: "gemini-2.5-flash",
-  groq: "llama-3.3-70b-versatile",
+  gemini: "gemini-3.6-flash",
+  groq: "openai/gpt-oss-120b",
 };
 
 type Body = {

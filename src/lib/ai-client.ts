@@ -6,11 +6,11 @@ export type RouterResponse = {
   provider_used: string | null;
   tokens: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
   word_count: number;
-  errors?: { provider: string; error: string }[];
+  errors?: { provider: string; error: string; quota?: boolean }[];
 };
 
 export async function callAiRouter(
-  input: { system?: string; prompt: string; providerOrder?: string[] },
+  input: { system?: string; prompt: string; providerOrder?: string[]; maxTokens?: number },
   signal?: AbortSignal | null,
 ): Promise<RouterResponse> {
   const res = await fetch("/api/public/ai-router", {

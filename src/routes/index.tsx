@@ -157,6 +157,26 @@ function Workspace() {
   const [mobileTab, setMobileTab] = useState<"original" | "rewrite">("rewrite");
   const abortRef = useRef<AbortController | null>(null);
   const restored = useRef(false);
+  /** provider -> timestamp (ms) until which the provider is skipped after a quota failure. */
+  const cooldownRef = useRef<Record<string, number>>({});
+  const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
+
+  const ALL_PROVIDERS = ["lovable", "openrouter", "gemini", "groq"] as const;
+  const COOLDOWN_MS = 10 * 60 * 1000;
+
+  /** Providers not currently sidelined by a credit/rate-limit failure. */
+  const availableProviders = () => {
+    const now = Date.now();
+    const open = ALL_PROVIDERS.filter((p) => (cooldownRef.current[p] ?? 0) <= now);
+    return open.length ? [...open] : [...ALL_PROVIDERS];
+  };
+
+  /** Sideline any provider that reported a quota/rate-limit error on this call. */
+  const noteQuotaFailures = (errors?: { provider: string; quota?: boolean }[]) => {
+    for (const e of errors ?? []) {
+      if (e.quota) cooldownRef.current[e.provider] = Date.now() + COOLDOWN_MS;
+    }
+  };
 
   // Offline restore: if IndexedDB came back empty, fall back to the LocalStorage mirror.
   useEffect(() => {
@@ -239,21 +259,36 @@ function Workspace() {
     const target = targetWordsFor(pages, wpp);
     // Hardwired floor: a rewrite may never come in more than 1,000 words under the original.
     const hardFloor = Math.max(0, sourceWords - MAX_WORDS_UNDER_ORIGINAL);
+    // ~2 tokens per word so long segments (target + allowed expansion) never truncate.
+    const tokenBudget = Math.min(32000, Math.max(8192, Math.round(target * 2)));
 
     try {
       const first = await callAiRouter(
-        { system: REWRITE_SYSTEM, prompt: rewritePrompt(segment.original, target, hardFloor) },
+        {
+          system: REWRITE_SYSTEM,
+          prompt: rewritePrompt(segment.original, target, hardFloor),
+          maxTokens: tokenBudget,
+          providerOrder: availableProviders(),
+        },
         controller.signal,
       );
+      noteQuotaFailures(first.errors);
+
 
       setPhase("parity");
       let finalText = first.content;
       let parityNote = "Parity confirmed";
       try {
         const audit = await callAiRouter(
-          { system: PARITY_SYSTEM, prompt: parityPrompt(segment.original, first.content) },
+          {
+            system: PARITY_SYSTEM,
+            prompt: parityPrompt(segment.original, first.content),
+            maxTokens: tokenBudget,
+            providerOrder: availableProviders(),
+          },
           controller.signal,
         );
+        noteQuotaFailures(audit.errors);
         if (!audit.content.trim().toUpperCase().startsWith("PARITY_OK")) {
           if (parseProse(audit.content).length > 0) {
             finalText = audit.content;
@@ -279,9 +314,12 @@ function Workspace() {
             {
               system: LENGTH_SYSTEM,
               prompt: lengthPrompt(plain, check.words, target, check.action, hardFloor),
+              maxTokens: tokenBudget,
+              providerOrder: availableProviders(),
             },
             controller.signal,
           );
+          noteQuotaFailures(adjusted.errors);
           if (parseProse(adjusted.content).length > 0) {
             finalText = adjusted.content;
             lengthNotes.push(
@@ -311,9 +349,12 @@ function Workspace() {
             {
               system: DIALOGUE_SYSTEM,
               prompt: dialoguePrompt(segment.original, plain, spokenBefore, spokenNow),
+              maxTokens: tokenBudget,
+              providerOrder: availableProviders(),
             },
             controller.signal,
           );
+          noteQuotaFailures(repaired.errors);
           const repairedPlain = parseProse(repaired.content).join("\n\n");
           if (
             repairedPlain.length > 0 &&
@@ -369,13 +410,26 @@ function Workspace() {
     }
   };
 
-  /** Runs every remaining segment back to back, showing live timing for each. */
+  /**
+   * Runs every remaining segment back to back, showing live timing for each.
+   * Requests a screen wake lock so a batch keeps running with the screen off or
+   * while another app is in the foreground; work is network-driven, so background
+   * timer throttling does not stall it.
+   */
   const runAllRemaining = async () => {
     if (!project) return;
     const queue = project.segments.filter((s) => s.status !== "verified" && !s.rewritten);
     if (queue.length === 0) {
       setNotice(["Every segment already has a rewrite."]);
       return;
+    }
+    try {
+      const nav = navigator as Navigator & {
+        wakeLock?: { request: (type: "screen") => Promise<{ release: () => Promise<void> }> };
+      };
+      wakeLockRef.current = (await nav.wakeLock?.request("screen")) ?? null;
+    } catch {
+      wakeLockRef.current = null;
     }
     setBatch({ done: 0, total: queue.length });
     for (let i = 0; i < queue.length; i++) {
@@ -387,7 +441,17 @@ function Workspace() {
       if (!ok) break;
     }
     setBatch(null);
+    void wakeLockRef.current?.release().catch(() => {});
+    wakeLockRef.current = null;
   };
+
+  // Warn before a tab close/refresh would kill an in-flight batch run.
+  useEffect(() => {
+    if (!batch) return;
+    const handler = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [batch]);
 
 
   const combineWithNext = () => {

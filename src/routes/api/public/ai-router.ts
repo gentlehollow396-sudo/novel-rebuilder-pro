@@ -15,9 +15,15 @@ function readEnv(name: string): string | undefined {
   return process.env[name];
 }
 
-type Provider = "lovable" | "openrouter" | "gemini" | "groq";
+export type Provider = "lovable" | "openrouter" | "gemini" | "groq";
+
 
 const DEFAULT_ORDER: Provider[] = ["lovable", "openrouter", "gemini", "groq"];
+
+/** Quota / rate-limit style failures mean the provider is temporarily doomed. */
+function isQuotaError(message: string): boolean {
+  return /\b(429|402)\b|insufficient|quota|credit|rate limit/i.test(message);
+}
 
 const MODELS: Record<Provider, string> = {
   lovable: "google/gemini-3.6-flash",
@@ -214,7 +220,7 @@ export const Route = createFileRoute("/api/public/ai-router")({
         const prompt = (body.prompt ?? "").slice(0, 400000);
         if (!prompt.trim()) return new Response("Missing prompt", { status: 400 });
         const system = (body.system ?? "").slice(0, 20000);
-        const maxTokens = Math.min(Math.max(body.maxTokens ?? 8192, 16), 32000);
+        const maxTokens = Math.min(Math.max(body.maxTokens ?? 16000, 16), 32000);
         const temperature = Math.min(Math.max(body.temperature ?? 0.7, 0), 2);
 
         const requested = Array.isArray(body.providerOrder) ? body.providerOrder : [];
@@ -227,7 +233,7 @@ export const Route = createFileRoute("/api/public/ai-router")({
         );
         const chain = [...new Set([...userProviders, ...(order.length ? order : DEFAULT_ORDER)])] as Provider[];
 
-        const errors: { provider: Provider; error: string }[] = [];
+        const errors: { provider: Provider; error: string; quota: boolean }[] = [];
 
         for (const provider of chain) {
           const model = body.model && chain.length === 1 ? body.model : MODELS[provider];
@@ -248,9 +254,11 @@ export const Route = createFileRoute("/api/public/ai-router")({
               provider_used: provider,
               tokens: result.tokens,
               word_count: wordCount(result.content),
+              errors,
             });
           } catch (e) {
-            errors.push({ provider, error: e instanceof Error ? e.message : String(e) });
+            const message = e instanceof Error ? e.message : String(e);
+            errors.push({ provider, error: message, quota: isQuotaError(message) });
           }
         }
 

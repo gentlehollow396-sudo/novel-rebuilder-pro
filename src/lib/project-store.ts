@@ -4,15 +4,27 @@ import type { DetailLevel, RewriteLanguage } from "@/lib/format-lock";
 
 export type SegmentStatus = "pending" | "rewriting" | "review" | "verified";
 
+/** One AI call made while producing a segment, for cost/budget reporting. */
+export type SegmentCallUsage = {
+  provider: string;
+  phase: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+};
+
 export type Segment = {
   id: number;
   original: string;
   rewritten: string;
   status: SegmentStatus;
   servedBy?: string;
+  /** Token usage per AI call spent on this segment. */
+  usage?: SegmentCallUsage[];
   /** Exact page target for this segment; defaults to the original's natural length. */
   targetPages?: number;
 };
+
 
 export type Project = {
   fileName: string;

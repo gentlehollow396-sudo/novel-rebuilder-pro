@@ -16,6 +16,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { CompilePanel } from "@/components/CompilePanel";
+import { CostsPanel } from "@/components/CostsPanel";
 import { ApiKeyDialog } from "@/components/ApiKeyDialog";
 import { FormatPanel } from "@/components/FormatPanel";
 import { DiffView } from "@/components/DiffView";
@@ -52,7 +53,12 @@ import {
   REWRITE_SYSTEM,
   rewritePrompt,
 } from "@/lib/prompts";
-import { useProject, type Project, type Segment } from "@/lib/project-store";
+import {
+  useProject,
+  type Project,
+  type Segment,
+  type SegmentCallUsage,
+} from "@/lib/project-store";
 import {
   countDialogueLines,
   countWords,
@@ -262,6 +268,23 @@ function Workspace() {
     // ~2 tokens per word so long segments (target + allowed expansion) never truncate.
     const tokenBudget = Math.min(32000, Math.max(8192, Math.round(target * 2)));
 
+    // Tracks provider + token spend for every call this segment makes.
+    const usage: SegmentCallUsage[] = [...(segment.usage ?? [])];
+    const recordUsage = (
+      phase: string,
+      result: { provider_used: string | null; tokens: { prompt_tokens: number; completion_tokens: number; total_tokens: number } },
+    ) => {
+      usage.push({
+        provider: result.provider_used ?? "unknown",
+        phase,
+        promptTokens: result.tokens?.prompt_tokens ?? 0,
+        completionTokens: result.tokens?.completion_tokens ?? 0,
+        totalTokens:
+          result.tokens?.total_tokens ??
+          (result.tokens?.prompt_tokens ?? 0) + (result.tokens?.completion_tokens ?? 0),
+      });
+    };
+
     try {
       const first = await callAiRouter(
         {
@@ -273,6 +296,7 @@ function Workspace() {
         controller.signal,
       );
       noteQuotaFailures(first.errors);
+      recordUsage("rewrite", first);
 
 
       setPhase("parity");
@@ -289,6 +313,7 @@ function Workspace() {
           controller.signal,
         );
         noteQuotaFailures(audit.errors);
+      recordUsage("parity", audit);
         if (!audit.content.trim().toUpperCase().startsWith("PARITY_OK")) {
           if (parseProse(audit.content).length > 0) {
             finalText = audit.content;
@@ -320,6 +345,7 @@ function Workspace() {
             controller.signal,
           );
           noteQuotaFailures(adjusted.errors);
+      recordUsage("length", adjusted);
           if (parseProse(adjusted.content).length > 0) {
             finalText = adjusted.content;
             lengthNotes.push(
@@ -355,6 +381,7 @@ function Workspace() {
             controller.signal,
           );
           noteQuotaFailures(repaired.errors);
+      recordUsage("dialogue", repaired);
           const repairedPlain = parseProse(repaired.content).join("\n\n");
           if (
             repairedPlain.length > 0 &&
@@ -385,6 +412,7 @@ function Workspace() {
       updateSegment(segment.id, {
         rewritten: html,
         status: "review",
+        usage,
         ...(first.provider_used ? { servedBy: first.provider_used } : {}),
       });
       const spokenAfter = countDialogueLines(parseProse(html).join("\n\n"));
@@ -603,6 +631,8 @@ function Workspace() {
               />
 
               <CompilePanel project={project} onProjectChange={setProject} />
+
+              <CostsPanel project={project} />
 
               <Button
                 variant="ghost"

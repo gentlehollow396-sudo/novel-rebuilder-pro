@@ -55,17 +55,22 @@ export function rowsFor(usage: Segment["usage"]): UsageRow[] {
 }
 
 export function mergeRows(all: UsageRow[][]): UsageRow[] {
-  return rowsFor(
-    all.flat().flatMap((row) =>
-      Array.from({ length: row.calls }, (_, i) => ({
-        provider: row.provider,
-        promptTokens: i === 0 ? row.promptTokens : 0,
-        completionTokens: i === 0 ? row.completionTokens : 0,
-        totalTokens: i === 0 ? row.totalTokens : 0,
-      })),
-    ),
-  );
+  const map = new Map<string, UsageRow>();
+  for (const row of all.flat()) {
+    const cur = map.get(row.provider);
+    if (!cur) {
+      map.set(row.provider, { ...row });
+      continue;
+    }
+    cur.calls += row.calls;
+    cur.promptTokens += row.promptTokens;
+    cur.completionTokens += row.completionTokens;
+    cur.totalTokens += row.totalTokens;
+    cur.cost += row.cost;
+  }
+  return [...map.values()].sort((a, b) => b.totalTokens - a.totalTokens);
 }
+
 
 export function formatUsd(value: number) {
   if (value === 0) return "$0.00";

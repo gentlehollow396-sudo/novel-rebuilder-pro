@@ -439,19 +439,36 @@ function Workspace() {
     }
   };
 
-  /**
-   * Runs every remaining segment back to back, showing live timing for each.
-   * Requests a screen wake lock so a batch keeps running with the screen off or
-   * while another app is in the foreground; work is network-driven, so background
-   * timer throttling does not stall it.
-   */
-  const runAllRemaining = async () => {
-    if (!project) return;
-    const queue = project.segments.filter((s) => s.status !== "verified" && !s.rewritten);
-    if (queue.length === 0) {
-      setNotice(["Every segment already has a rewrite."]);
-      return;
+  /** Silent looping audio keeps mobile browsers from suspending a backgrounded tab. */
+  const startKeepAlive = () => {
+    try {
+      const Ctx =
+        window.AudioContext ??
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!Ctx || keepAliveRef.current) return;
+      const ctx = new Ctx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      gain.gain.value = 0.0001;
+      osc.connect(gain).connect(ctx.destination);
+      osc.start();
+      keepAliveRef.current = { ctx, osc };
+    } catch {
+      keepAliveRef.current = null;
     }
+  };
+
+  const stopKeepAlive = () => {
+    try {
+      keepAliveRef.current?.osc.stop();
+      void keepAliveRef.current?.ctx.close();
+    } catch {
+      /* ignore */
+    }
+    keepAliveRef.current = null;
+  };
+
+  const acquireWakeLock = async () => {
     try {
       const nav = navigator as Navigator & {
         wakeLock?: { request: (type: "screen") => Promise<{ release: () => Promise<void> }> };
@@ -460,19 +477,58 @@ function Workspace() {
     } catch {
       wakeLockRef.current = null;
     }
+  };
+
+  /**
+   * Runs every remaining segment back to back, showing live timing for each.
+   * Holds a screen wake lock plus a silent audio loop so the run survives the
+   * screen turning off or another app coming to the foreground, and records a
+   * resume flag so an interrupted run picks itself back up on return.
+   */
+  const runAllRemaining = async () => {
+    if (!project || runningRef.current) return;
+    const queue = project.segments.filter((s) => s.status !== "verified" && !s.rewritten);
+    if (queue.length === 0) {
+      setNotice(["Every segment already has a rewrite."]);
+      return;
+    }
+    runningRef.current = true;
+    try {
+      localStorage.setItem(RESUME_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    await acquireWakeLock();
+    startKeepAlive();
     setBatch({ done: 0, total: queue.length });
+    let interrupted = false;
     for (let i = 0; i < queue.length; i++) {
       const segment = queue[i];
       if (!segment) break;
       setActiveId(segment.id);
       const ok = await runRewrite(segment);
       setBatch({ done: i + 1, total: queue.length });
-      if (!ok) break;
+      if (!ok) {
+        interrupted = true;
+        break;
+      }
     }
     setBatch(null);
+    runningRef.current = false;
+    if (!interrupted) {
+      try {
+        localStorage.removeItem(RESUME_KEY);
+      } catch {
+        /* ignore */
+      }
+    }
     void wakeLockRef.current?.release().catch(() => {});
     wakeLockRef.current = null;
+    stopKeepAlive();
   };
+
+  const runAllRef = useRef(runAllRemaining);
+  runAllRef.current = runAllRemaining;
 
   // Warn before a tab close/refresh would kill an in-flight batch run.
   useEffect(() => {
@@ -481,6 +537,42 @@ function Workspace() {
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [batch]);
+
+  // Coming back to the tab: re-take the wake lock and restart a run that the
+  // browser froze while the app was in the background.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      if (runningRef.current) {
+        void acquireWakeLock();
+        return;
+      }
+      let pending = false;
+      try {
+        pending = localStorage.getItem(RESUME_KEY) === "1";
+      } catch {
+        pending = false;
+      }
+      if (pending) void runAllRef.current();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
+
+  // Resume automatically after a reload that interrupted a run.
+  useEffect(() => {
+    if (!loaded || !project || runningRef.current) return;
+    let pending = false;
+    try {
+      pending = localStorage.getItem(RESUME_KEY) === "1";
+    } catch {
+      pending = false;
+    }
+    if (pending) void runAllRef.current();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, !!project]);
+
+
 
 
   const combineWithNext = () => {

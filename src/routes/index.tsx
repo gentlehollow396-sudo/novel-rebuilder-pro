@@ -167,9 +167,13 @@ function Workspace() {
   /** provider -> timestamp (ms) until which the provider is skipped after a quota failure. */
   const cooldownRef = useRef<Record<string, number>>({});
   const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
+  const keepAliveRef = useRef<{ ctx: AudioContext; osc: OscillatorNode } | null>(null);
+  const runningRef = useRef(false);
+  const RESUME_KEY = "nre-batch-resume";
 
   const ALL_PROVIDERS = ["lovable", "openrouter", "gemini", "groq"] as const;
   const COOLDOWN_MS = 10 * 60 * 1000;
+
 
   /** Providers not currently sidelined by a credit/rate-limit failure. */
   const availableProviders = () => {

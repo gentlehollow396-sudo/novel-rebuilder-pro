@@ -20,6 +20,7 @@ import { CostsPanel } from "@/components/CostsPanel";
 import { ApiKeyDialog } from "@/components/ApiKeyDialog";
 import { FormatPanel } from "@/components/FormatPanel";
 import { DiffView } from "@/components/DiffView";
+import { GapPanel } from "@/components/GapPanel";
 import { UploadPanel } from "@/components/UploadPanel";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -854,6 +855,21 @@ function Workspace() {
                         originalPanel
                       )}
                     </div>
+
+                    {active.rewritten ? (
+                      <GapPanel
+                        original={active.original}
+                        rewritten={rewrittenPlain}
+                        onFixManually={(line) => {
+                          const next = `${rewrittenPlain.trim()}\n\n${line}`;
+                          setDraft(next);
+                          saveDraft(active.id, next);
+                          setEditing(true);
+                        }}
+                      />
+                    ) : null}
+
+
 
                     {active.rewritten ? (
                       <div className="flex flex-wrap gap-2">

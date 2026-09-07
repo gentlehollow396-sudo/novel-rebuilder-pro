@@ -204,6 +204,16 @@ async function callProvider(
       );
     case "gemini":
       return callGemini(model, system, prompt, maxTokens, temperature, userApiKeys?.gemini);
+    case "cerebras":
+      return callOpenAICompatible(
+        "https://api.cerebras.ai/v1/chat/completions",
+        assertKey(userApiKeys?.cerebras || readEnv("CEREBRAS_API_KEY"), "cerebras"),
+        model,
+        system,
+        prompt,
+        maxTokens,
+        temperature,
+      );
   }
 }
 

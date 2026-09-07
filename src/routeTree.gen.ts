@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiPublicAiRewriteRouteImport } from './routes/api/public/ai-rewrite'
 import { Route as ApiPublicAiRouterRouteImport } from './routes/api/public/ai-router'
+import { Route as ApiPublicFreeAiScanRouteImport } from './routes/api/public/free-ai-scan'
 import { Route as ApiPublicOpenrouterRouteImport } from './routes/api/public/openrouter'
 
 const IndexRoute = IndexRouteImport.update({
@@ -29,6 +30,11 @@ const ApiPublicAiRouterRoute = ApiPublicAiRouterRouteImport.update({
   path: '/api/public/ai-router',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicFreeAiScanRoute = ApiPublicFreeAiScanRouteImport.update({
+  id: '/api/public/free-ai-scan',
+  path: '/api/public/free-ai-scan',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicOpenrouterRoute = ApiPublicOpenrouterRouteImport.update({
   id: '/api/public/openrouter',
   path: '/api/public/openrouter',
@@ -39,12 +45,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/api/public/ai-rewrite': typeof ApiPublicAiRewriteRoute
   '/api/public/ai-router': typeof ApiPublicAiRouterRoute
+  '/api/public/free-ai-scan': typeof ApiPublicFreeAiScanRoute
   '/api/public/openrouter': typeof ApiPublicOpenrouterRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/api/public/ai-rewrite': typeof ApiPublicAiRewriteRoute
   '/api/public/ai-router': typeof ApiPublicAiRouterRoute
+  '/api/public/free-ai-scan': typeof ApiPublicFreeAiScanRoute
   '/api/public/openrouter': typeof ApiPublicOpenrouterRoute
 }
 export interface FileRoutesById {
@@ -52,6 +60,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/api/public/ai-rewrite': typeof ApiPublicAiRewriteRoute
   '/api/public/ai-router': typeof ApiPublicAiRouterRoute
+  '/api/public/free-ai-scan': typeof ApiPublicFreeAiScanRoute
   '/api/public/openrouter': typeof ApiPublicOpenrouterRoute
 }
 export interface FileRouteTypes {
@@ -60,18 +69,21 @@ export interface FileRouteTypes {
     | '/'
     | '/api/public/ai-rewrite'
     | '/api/public/ai-router'
+    | '/api/public/free-ai-scan'
     | '/api/public/openrouter'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/api/public/ai-rewrite'
     | '/api/public/ai-router'
+    | '/api/public/free-ai-scan'
     | '/api/public/openrouter'
   id:
     | '__root__'
     | '/'
     | '/api/public/ai-rewrite'
     | '/api/public/ai-router'
+    | '/api/public/free-ai-scan'
     | '/api/public/openrouter'
   fileRoutesById: FileRoutesById
 }
@@ -79,6 +91,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ApiPublicAiRewriteRoute: typeof ApiPublicAiRewriteRoute
   ApiPublicAiRouterRoute: typeof ApiPublicAiRouterRoute
+  ApiPublicFreeAiScanRoute: typeof ApiPublicFreeAiScanRoute
   ApiPublicOpenrouterRoute: typeof ApiPublicOpenrouterRoute
 }
 
@@ -105,6 +118,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicAiRouterRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/free-ai-scan': {
+      id: '/api/public/free-ai-scan'
+      path: '/api/public/free-ai-scan'
+      fullPath: '/api/public/free-ai-scan'
+      preLoaderRoute: typeof ApiPublicFreeAiScanRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/openrouter': {
       id: '/api/public/openrouter'
       path: '/api/public/openrouter'
@@ -119,6 +139,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ApiPublicAiRewriteRoute: ApiPublicAiRewriteRoute,
   ApiPublicAiRouterRoute: ApiPublicAiRouterRoute,
+  ApiPublicFreeAiScanRoute: ApiPublicFreeAiScanRoute,
   ApiPublicOpenrouterRoute: ApiPublicOpenrouterRoute,
 }
 export const routeTree = rootRouteImport

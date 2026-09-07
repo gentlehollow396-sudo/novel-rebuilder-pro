@@ -21,6 +21,7 @@ import { ApiKeyDialog } from "@/components/ApiKeyDialog";
 import { FormatPanel } from "@/components/FormatPanel";
 import { DiffView } from "@/components/DiffView";
 import { GapPanel } from "@/components/GapPanel";
+import { FreeAiPanel } from "@/components/FreeAiPanel";
 import { UploadPanel } from "@/components/UploadPanel";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -730,6 +731,9 @@ function Workspace() {
               <CompilePanel project={project} onProjectChange={setProject} />
 
               <CostsPanel project={project} />
+
+              <FreeAiPanel />
+
 
               <Button
                 variant="ghost"

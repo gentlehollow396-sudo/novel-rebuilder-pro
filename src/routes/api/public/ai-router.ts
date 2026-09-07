@@ -238,6 +238,7 @@ export const Route = createFileRoute("/api/public/ai-router")({
         const userProviders = [
           body.userApiKeys?.gemini ? "gemini" : "",
           body.userApiKeys?.groq ? "groq" : "",
+          body.userApiKeys?.cerebras ? "cerebras" : "",
         ].filter(Boolean);
         const order = requested.filter((p): p is Provider =>
           DEFAULT_ORDER.includes(p as Provider),

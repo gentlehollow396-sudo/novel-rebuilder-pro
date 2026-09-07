@@ -9,6 +9,7 @@ export const PROVIDER_PRICING: Record<string, { in: number; out: number; label: 
   openrouter: { in: 3, out: 15, label: "OpenRouter (Claude Sonnet)" },
   gemini: { in: 0.3, out: 2.5, label: "Gemini Flash" },
   groq: { in: 0.15, out: 0.75, label: "Groq (GPT-OSS 120B)" },
+  cerebras: { in: 0.6, out: 0.85, label: "Cerebras (Llama 3.3 70B)" },
 };
 
 export type UsageRow = {

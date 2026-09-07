@@ -1,6 +1,7 @@
 export type UserApiKeys = {
   gemini?: string;
   groq?: string;
+  cerebras?: string;
 };
 
 const STORAGE_KEY = "nre.user-api-keys.v1";
@@ -12,6 +13,7 @@ function readStoredKeys(): UserApiKeys {
     return {
       gemini: typeof parsed.gemini === "string" ? parsed.gemini : undefined,
       groq: typeof parsed.groq === "string" ? parsed.groq : undefined,
+      cerebras: typeof parsed.cerebras === "string" ? parsed.cerebras : undefined,
     };
   } catch {
     return {};

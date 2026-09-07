@@ -15,10 +15,10 @@ function readEnv(name: string): string | undefined {
   return process.env[name];
 }
 
-export type Provider = "lovable" | "openrouter" | "gemini" | "groq";
+export type Provider = "lovable" | "openrouter" | "gemini" | "groq" | "cerebras";
 
 
-const DEFAULT_ORDER: Provider[] = ["lovable", "openrouter", "gemini", "groq"];
+const DEFAULT_ORDER: Provider[] = ["lovable", "openrouter", "gemini", "groq", "cerebras"];
 
 /** Quota / rate-limit style failures mean the provider is temporarily doomed. */
 function isQuotaError(message: string): boolean {
@@ -30,6 +30,7 @@ const MODELS: Record<Provider, string> = {
   openrouter: "anthropic/claude-sonnet-4.6",
   gemini: "gemini-3.6-flash",
   groq: "openai/gpt-oss-120b",
+  cerebras: "llama-3.3-70b",
 };
 
 type Body = {
@@ -39,7 +40,7 @@ type Body = {
   providerOrder?: string[];
   maxTokens?: number;
   temperature?: number;
-  userApiKeys?: { gemini?: string; groq?: string };
+  userApiKeys?: { gemini?: string; groq?: string; cerebras?: string };
 };
 
 type Usage = { prompt_tokens: number; completion_tokens: number; total_tokens: number };
@@ -203,6 +204,16 @@ async function callProvider(
       );
     case "gemini":
       return callGemini(model, system, prompt, maxTokens, temperature, userApiKeys?.gemini);
+    case "cerebras":
+      return callOpenAICompatible(
+        "https://api.cerebras.ai/v1/chat/completions",
+        assertKey(userApiKeys?.cerebras || readEnv("CEREBRAS_API_KEY"), "cerebras"),
+        model,
+        system,
+        prompt,
+        maxTokens,
+        temperature,
+      );
   }
 }
 
@@ -227,6 +238,7 @@ export const Route = createFileRoute("/api/public/ai-router")({
         const userProviders = [
           body.userApiKeys?.gemini ? "gemini" : "",
           body.userApiKeys?.groq ? "groq" : "",
+          body.userApiKeys?.cerebras ? "cerebras" : "",
         ].filter(Boolean);
         const order = requested.filter((p): p is Provider =>
           DEFAULT_ORDER.includes(p as Provider),

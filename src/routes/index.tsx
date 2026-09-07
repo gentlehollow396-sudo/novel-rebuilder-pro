@@ -172,7 +172,7 @@ function Workspace() {
   const runningRef = useRef(false);
   const RESUME_KEY = "nre-batch-resume";
 
-  const ALL_PROVIDERS = ["lovable", "openrouter", "gemini", "groq"] as const;
+  const ALL_PROVIDERS = ["lovable", "openrouter", "gemini", "groq", "cerebras"] as const;
   const COOLDOWN_MS = 10 * 60 * 1000;
 
 
